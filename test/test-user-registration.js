@@ -9,11 +9,13 @@ async function testUserRegistration() {
     try {
         // Simula variáveis de ambiente para teste
         process.env.DEVICE_IPS = '192.168.1.100,192.168.1.101';
-        process.env.BASE_URL = 'https://api.exemplo.com';
+        process.env.BASE_URL = 'http://localhost:3000/';
+        process.env.EVENT_ID = 'f4iarsufucggne5zk82952hh';
 
         console.log('📋 Configuração de teste:');
         console.log(`   DEVICE_IPS: ${process.env.DEVICE_IPS}`);
         console.log(`   BASE_URL: ${process.env.BASE_URL}\n`);
+        console.log(`   EVENT_ID: ${process.env.EVENT_ID}\n`);
 
         // Teste 1: Buscar participantes (simulado)
         console.log('🔍 Teste 1: Buscar participantes...');
