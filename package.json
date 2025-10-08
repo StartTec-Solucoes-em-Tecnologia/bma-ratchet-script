@@ -4,9 +4,11 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
+    "register-users": "node src/index.js --register-users",
     "test": "node test/test-simple.js",
     "test:simple": "node test/test-simple.js",
     "test:mock": "node test/test.js",
+    "test:users": "node test/test-user-registration.js",
     "test:watch": "nodemon test/test-simple.js",
     "test:verbose": "node test/test-simple.js --verbose"
   },
