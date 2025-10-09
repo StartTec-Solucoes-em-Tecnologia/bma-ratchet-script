@@ -87,7 +87,7 @@ async function registerUserInRatchet(deviceIp, participant, skipCache = false) {
         console.log(`🔄 Registrando ${participant.nome} (${participant.codigo_de_convite}) na catraca ${deviceIp}...`);
 
         // Monta a URL da requisição
-        const url = `http://${deviceIp}/cgi-bin/recordUpdater.cgi?action=insert&name=AccessControlCard&CardNo=${participant.codigo_de_convite}&CardStatus=0&CardName=${encodeURIComponent(participant.nome)}&UserID=${participant.id}&Doors[0]=0&CardStatus=0&CardType=2&UseTimes=1`;
+        const url = `http://${deviceIp}/cgi-bin/recordUpdater.cgi?action=insert&name=AccessControlCard&CardNo=${participant.codigo_de_convite}&CardStatus=0&CardName=${encodeURIComponent(participant.nome)}&UserID=${participant.id}&Doors[0]=0&CardType=2&UseTime=1&FirstEnter=true`;
 
         // Configuração de autenticação digest
         const username = process.env.DIGEST_USERNAME;
