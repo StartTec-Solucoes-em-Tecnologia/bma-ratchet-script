@@ -5,11 +5,16 @@
   "scripts": {
     "start": "node src/index.js",
     "register-users": "node src/index.js --register-users",
+    "check-duplicates": "node src/duplicate-checker.js",
+    "cache:stats": "node src/cache-manager.js stats",
+    "cache:clear": "node src/cache-manager.js clear",
+    "cache:help": "node src/cache-manager.js help",
     "test": "node test/test-simple.js",
     "test:simple": "node test/test-simple.js",
     "test:mock": "node test/test.js",
     "test:users": "node test/test-user-registration.js",
     "test:digest": "node test/test-digest-auth.js",
+    "test:cache": "node test/test-redis-cache.js",
     "test:watch": "nodemon test/test-simple.js",
     "test:verbose": "node test/test-simple.js --verbose"
   },
@@ -18,7 +23,8 @@
     "axios": "^1.6.0",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
-    "http-auth": "^4.2.1"
+    "http-auth": "^4.2.1",
+    "ioredis": "^5.3.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

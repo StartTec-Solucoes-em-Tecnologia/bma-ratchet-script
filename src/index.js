@@ -1,6 +1,7 @@
 const axios = require('axios');
 const crypto = require('crypto');
 const AxiosDigestAuth = require('@mhoc/axios-digest-auth').default;
+const redisCache = require('./redis-cache');
 require('dotenv').config();
 
 /**
@@ -63,8 +64,24 @@ async function fetchParticipants() {
 /**
  * Registra um usuário em uma catraca individual
  */
-async function registerUserInRatchet(deviceIp, participant) {
+async function registerUserInRatchet(deviceIp, participant, skipCache = false) {
     try {
+        // Verifica se o usuário já foi registrado (cache)
+        if (!skipCache) {
+            const isAlreadyRegistered = await redisCache.isUserRegistered(deviceIp, participant);
+            if (isAlreadyRegistered) {
+                console.log(`⏭️  SKIP: ${participant.nome} (${participant.codigo_de_convite}) já registrado na catraca ${deviceIp} (cache)`);
+                return {
+                    deviceIp,
+                    participant,
+                    success: true,
+                    skipped: true,
+                    fromCache: true,
+                    message: 'Usuário já registrado anteriormente (verificado via cache)'
+                };
+            }
+        }
+
         console.log(`🔄 Registrando ${participant.nome} (${participant.codigo_de_convite}) na catraca ${deviceIp}...`);
 
         // Monta a URL da requisição
@@ -93,10 +110,14 @@ async function registerUserInRatchet(deviceIp, participant) {
 
         console.log(`✅ Usuário ${participant.nome} registrado com sucesso na catraca ${deviceIp}! Status: ${response.status}`);
         
+        // Marca o usuário como registrado no cache
+        await redisCache.markUserAsRegistered(deviceIp, participant);
+        
         return {
             deviceIp,
             participant,
             success: true,
+            skipped: false,
             status: response.status,
             data: response.data
         };
@@ -114,6 +135,7 @@ async function registerUserInRatchet(deviceIp, participant) {
             deviceIp,
             participant,
             success: false,
+            skipped: false,
             error: error.message
         };
     }
@@ -122,11 +144,16 @@ async function registerUserInRatchet(deviceIp, participant) {
 /**
  * Registra todos os usuários em todas as catracas
  */
-async function registerAllUsersInAllRatchets() {
+async function registerAllUsersInAllRatchets(options = {}) {
     try {
+        // Inicializa o cache Redis
+        console.log('🔌 Conectando ao Redis...');
+        await redisCache.connect();
+        
         // Verifica se as variáveis de ambiente estão definidas
         const deviceIps = process.env.DEVICE_IPS;
         const baseUrl = process.env.BASE_URL;
+        const skipCache = options.skipCache || false;
 
         if (!deviceIps) {
             throw new Error('Variável de ambiente DEVICE_IPS não está definida');
@@ -136,8 +163,12 @@ async function registerAllUsersInAllRatchets() {
             throw new Error('Variável de ambiente BASE_URL não está definida');
         }
 
+        if (skipCache) {
+            console.log('⚠️  Cache desabilitado - todos os usuários serão registrados');
+        }
+
         // Busca os participantes
-        const participants = fetchParticipants();
+        const participants = await fetchParticipants();
         
         // Converte a string de IPs em array
         const ipArray = deviceIps.split(',').map(ip => ip.trim());
@@ -149,6 +180,7 @@ async function registerAllUsersInAllRatchets() {
         let totalOperations = 0;
         let successCount = 0;
         let errorCount = 0;
+        let skippedCount = 0;
 
         // Processa cada participante em cada catraca
         for (let i = 0; i < participants.length; i++) {
@@ -158,19 +190,30 @@ async function registerAllUsersInAllRatchets() {
                 const deviceIp = ipArray[j];
                 totalOperations++;
                 
-                const result = await registerUserInRatchet(deviceIp, participant);
+                const result = await registerUserInRatchet(deviceIp, participant, skipCache);
                 results.push(result);
                 
                 if (result.success) {
+                    if (result.skipped) {
+                        skippedCount++;
+                    }
                     successCount++;
                 } else {
                     errorCount++;
                 }
 
                 // Pequena pausa entre requisições para não sobrecarregar
-                await new Promise(resolve => setTimeout(resolve, 500));
+                // Pausa menor se for skip do cache
+                if (!result.skipped) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                } else {
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                }
             }
         }
+
+        // Estatísticas do cache
+        const cacheStats = await redisCache.getStats();
 
         // Relatório final
         console.log('\n📊 RELATÓRIO FINAL:');
@@ -178,7 +221,13 @@ async function registerAllUsersInAllRatchets() {
         console.log(`🏢 Catracas: ${ipArray.length}`);
         console.log(`🔄 Total de operações: ${totalOperations}`);
         console.log(`✅ Sucessos: ${successCount}`);
+        console.log(`⏭️  Pulados (cache): ${skippedCount}`);
         console.log(`❌ Erros: ${errorCount}`);
+        
+        if (cacheStats.enabled) {
+            console.log(`\n💾 Cache Redis:`);
+            console.log(`  📦 Total de registros no cache: ${cacheStats.totalRecords}`);
+        }
 
         // Lista detalhada dos resultados por participante
         console.log('\n📋 DETALHES POR PARTICIPANTE:');
@@ -186,7 +235,14 @@ async function registerAllUsersInAllRatchets() {
             console.log(`\n👤 ${participant.nome} (${participant.codigo_de_convite}):`);
             const participantResults = results.filter(r => r.participant.id === participant.id);
             participantResults.forEach(result => {
-                const status = result.success ? '✅' : '❌';
+                let status = '';
+                if (result.success && result.skipped) {
+                    status = '⏭️ ';
+                } else if (result.success) {
+                    status = '✅';
+                } else {
+                    status = '❌';
+                }
                 console.log(`  ${status} ${result.deviceIp}`);
             });
         });
@@ -198,6 +254,7 @@ async function registerAllUsersInAllRatchets() {
             totalOperations,
             successCount,
             errorCount,
+            skippedCount,
             results
         };
 
@@ -384,5 +441,6 @@ module.exports = {
     registerSingleRatchet,
     registerAllUsersInAllRatchets,
     registerUserInRatchet,
-    fetchParticipants
+    fetchParticipants,
+    redisCache
 };

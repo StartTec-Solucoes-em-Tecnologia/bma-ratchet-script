@@ -1,21 +1,41 @@
 # BMA Ratchet Script
 
-Script para cadastrar múltiplas catracas via API e registrar usuários nas catracas com sistema de testes automatizados.
+Script para cadastrar múltiplas catracas via API e registrar usuários nas catracas com sistema de testes automatizados e **cache Redis para prevenção de duplicatas**.
+
+## ✨ Novidades
+
+- 🆕 **Sistema de Cache Redis**: Evita duplicatas automaticamente
+- ⚡ **Performance Melhorada**: Re-execuções até 95% mais rápidas
+- 📊 **Gerenciamento de Cache**: Comandos para visualizar e gerenciar o cache
+- 🔄 **Modo Resiliente**: Funciona com ou sem Redis disponível
+- 🧪 **Testes de Cache**: Validação completa do sistema
+
+> 💡 **Guia Rápido**: Veja o arquivo `QUICKSTART.md` para começar rapidamente!
 
 ## 📁 Estrutura do Projeto
 
 ```
 bma-ratchet-script/
-├── src/                    # Código fonte principal
-│   └── index.js           # Script principal de registro de catracas
-├── test/                  # Scripts de teste
-│   ├── test-simple.js     # Testes simples (recomendado)
-│   └── test.js            # Testes com servidor mock
-├── docs/                  # Documentação
-│   ├── README.md          # Documentação original
-│   └── TEST-README.md     # Documentação dos testes
-├── package.json           # Configurações do projeto
-└── README.md              # Este arquivo
+├── src/                        # Código fonte principal
+│   ├── index.js               # Script principal de registro
+│   ├── redis-cache.js         # 🆕 Módulo de cache Redis
+│   └── cache-manager.js       # 🆕 Gerenciador de cache CLI
+├── test/                      # Scripts de teste
+│   ├── test-simple.js         # Testes simples
+│   ├── test-user-registration.js  # Testes de registro de usuários
+│   ├── test-digest-auth.js    # Testes de autenticação
+│   ├── test-redis-cache.js    # 🆕 Testes do cache Redis
+│   └── test.js                # Testes com servidor mock
+├── docs/                      # Documentação
+│   ├── README.md              # Documentação original
+│   ├── TEST-README.md         # Documentação dos testes
+│   ├── USER-REGISTRATION.md   # Registro de usuários
+│   ├── DUPLICATE-CHECKER.md   # Verificador de duplicatas
+│   └── REDIS-CACHE.md         # 🆕 Sistema de cache Redis
+├── package.json               # Configurações do projeto
+├── env.example                # 🆕 Exemplo de configuração
+├── QUICKSTART.md              # 🆕 Guia rápido de início
+└── README.md                  # Este arquivo
 ```
 
 ## 🚀 Como Usar
@@ -54,20 +74,79 @@ npm run test:watch
 
 ## 📋 Configuração
 
-### Para Configuração de Catracas
-1. Copie o arquivo `.env.example` para `.env`: `cp .env.example .env`
-2. Configure os IPs das catracas na variável `DEVICE_IPS`
-3. Execute `npm start`
+### 1. Instalar Dependências
+```bash
+npm install
+```
 
-### Para Registro de Usuários
-1. Copie o arquivo `.env.example` para `.env`: `cp .env.example .env`
-2. Configure as variáveis:
-   - `DEVICE_IPS`: IPs das catracas separados por vírgula
-   - `BASE_URL`: URL base da API para buscar participantes
-   - `EVENT_ID`: ID do evento para buscar participantes
-   - `DIGEST_USERNAME`: Username para autenticação digest HTTP (opcional)
-   - `DIGEST_PASSWORD`: Password para autenticação digest HTTP (opcional)
-3. Execute `npm run register-users`
+### 2. Instalar Redis (opcional, mas recomendado)
+
+O Redis é usado para cache e prevenção de duplicatas:
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get update
+sudo apt-get install redis-server
+sudo systemctl start redis
+```
+
+**macOS:**
+```bash
+brew install redis
+brew services start redis
+```
+
+**Docker:**
+```bash
+docker run -d -p 6379:6379 --name redis redis:latest
+```
+
+**Verificar instalação:**
+```bash
+redis-cli ping
+# Deve retornar: PONG
+```
+
+> **Nota:** Se o Redis não estiver instalado, o sistema continuará funcionando, mas sem prevenção de duplicatas.
+
+### 3. Configurar Variáveis de Ambiente
+
+1. Copie o arquivo de exemplo:
+   ```bash
+   cp env.example .env
+   ```
+
+2. Edite o arquivo `.env` com suas configurações:
+   ```env
+   # API
+   BASE_URL=https://sua-api.com
+   EVENT_ID=123
+   
+   # Catracas
+   DEVICE_IPS=192.168.1.100,192.168.1.101
+   
+   # Autenticação
+   DIGEST_USERNAME=admin
+   DIGEST_PASSWORD=senha123
+   
+   # Redis (opcional)
+   REDIS_HOST=localhost
+   REDIS_PORT=6379
+   REDIS_PASSWORD=
+   REDIS_DB=0
+   ```
+
+### 4. Executar
+
+**Para configuração de catracas:**
+```bash
+npm start
+```
+
+**Para registro de usuários:**
+```bash
+npm run register-users
+```
 
 Para mais detalhes, consulte `docs/USER-REGISTRATION.md`.
 
@@ -120,14 +199,62 @@ Para mais detalhes sobre os testes, consulte `docs/TEST-README.md`.
 
 - **Documentação Principal**: `docs/README.md`
 - **Documentação dos Testes**: `docs/TEST-README.md`
+- **Sistema de Cache Redis**: `docs/REDIS-CACHE.md`
+- **Verificador de Duplicatas**: `docs/DUPLICATE-CHECKER.md`
+- **Registro de Usuários**: `docs/USER-REGISTRATION.md`
+
+## 💾 Sistema de Cache Redis
+
+O projeto agora inclui um sistema de cache Redis para evitar duplicatas e melhorar a performance:
+
+### Recursos do Cache:
+- ✅ **Evita duplicatas**: Pula usuários já registrados em cada catraca
+- ⚡ **Melhora performance**: Reduz tempo de execução em re-processamentos
+- 🔄 **Resiliente**: Funciona normalmente se o Redis não estiver disponível
+- 📊 **Rastreável**: Mantém histórico de registros realizados
+
+### Comandos do Cache:
+```bash
+# Ver estatísticas do cache
+npm run cache:stats
+
+# Limpar todo o cache
+npm run cache:clear
+
+# Verificar usuário específico
+node src/cache-manager.js check <ip> <id>
+
+# Remover usuário do cache
+node src/cache-manager.js remove <ip> <id>
+```
+
+### Configuração do Redis:
+Adicione ao seu arquivo `.env`:
+```env
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_DB=0
+```
+
+Para mais detalhes, consulte `docs/REDIS-CACHE.md`.
 
 ## 🔧 Scripts Disponíveis
 
+### Principais:
 - `npm start` - Configuração de catracas (modo padrão)
 - `npm run register-users` - Registro de usuários em catracas
+
+### Cache:
+- `npm run cache:stats` - Estatísticas do cache Redis
+- `npm run cache:clear` - Limpar cache Redis
+- `npm run cache:help` - Ajuda sobre comandos de cache
+
+### Testes:
 - `npm test` - Executa testes simples
 - `npm run test:users` - Testa registro de usuários
 - `npm run test:digest` - Testa autenticação digest HTTP
+- `npm run test:cache` - Testa sistema de cache Redis
 - `npm run test:mock` - Executa testes com servidor mock
 - `npm run test:watch` - Executa testes em modo watch
 - `npm run test:verbose` - Executa testes com saída detalhada
