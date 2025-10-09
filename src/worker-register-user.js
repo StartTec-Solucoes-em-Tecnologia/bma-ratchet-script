@@ -35,8 +35,19 @@ async function registerUser({ deviceIp, participant, skipCache = false }) {
             }
         }
 
+        // Processa o nome para o CardName
+        // Remove "convidado", remove hífens, pega os dois primeiros nomes
+        let processedName = participant.nome
+            .toLowerCase()
+            .replace(/convidado/gi, '') // Remove a palavra "convidado" (case insensitive)
+            .replace(/-/g, '') // Remove hífens
+            .trim()
+            .split(/\s+/) // Divide por espaços
+            .slice(0, 2) // Pega apenas os dois primeiros nomes
+            .join(' '); // Junta com espaço entre os nomes
+        
         // Monta a URL da requisição
-        const url = `http://${deviceIp}/cgi-bin/recordUpdater.cgi?action=insert&name=AccessControlCard&CardNo=${participant.codigo_de_convite}&CardStatus=0&CardName=${encodeURIComponent(participant.nome)}&UserID=${participant.id}&Doors[0]=0&CardStatus=0&CardType=2&UseTime=1`;
+        const url = `http://${deviceIp}/cgi-bin/recordUpdater.cgi?action=insert&name=AccessControlCard&CardNo=${participant.codigo_de_convite}&CardStatus=0&CardName=${encodeURIComponent(processedName)}&UserID=${participant.id}&Doors[0]=0&CardStatus=0&CardType=2&UseTime=1`;
 
         // Configuração de autenticação digest
         const username = process.env.DIGEST_USERNAME;
