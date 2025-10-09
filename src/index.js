@@ -1,10 +1,22 @@
 const axios = require('axios');
+const crypto = require('crypto');
 require('dotenv').config();
 
 /**
  * Script para cadastrar múltiplas catracas via API
  * Processa um array de IPs e chama a rota de configuração para cada um
  */
+
+/**
+ * Gera autenticação digest HTTP
+ */
+function generateDigestAuth(username, password, method, uri, realm, nonce, qop, nc, cnonce) {
+    const ha1 = crypto.createHash('md5').update(`${username}:${realm}:${password}`).digest('hex');
+    const ha2 = crypto.createHash('md5').update(`${method}:${uri}`).digest('hex');
+    const response = crypto.createHash('md5').update(`${ha1}:${nonce}:${nc}:${cnonce}:${qop}:${ha2}`).digest('hex');
+    
+    return `Digest username="${username}", realm="${realm}", nonce="${nonce}", uri="${uri}", qop=${qop}, nc=${nc}, cnonce="${cnonce}", response="${response}"`;
+}
 
 /**
  * Busca participantes da API
@@ -57,12 +69,30 @@ async function registerUserInRatchet(deviceIp, participant) {
         // Monta a URL da requisição
         const url = `http://${deviceIp}/cgi-bin/recordUpdater.cgi?action=insert&name=AccessControlCard&CardNo=${participant.codigo_de_convite}&CardStatus=0&CardName=${encodeURIComponent(participant.nome)}&UserID=${participant.id}&Doors[0]=0`;
 
+        // Configuração de autenticação digest
+        const username = process.env.DIGEST_USERNAME;
+        const password = process.env.DIGEST_PASSWORD;
+        
+        let headers = {
+            'User-Agent': 'BMA-Ratchet-Script/1.0.0'
+        };
+
+        // Se username e password estão definidos, adiciona autenticação digest
+        if (username && password) {
+            const realm = 'Digest';
+            const nonce = crypto.randomBytes(16).toString('hex');
+            const qop = 'auth';
+            const nc = '00000001';
+            const cnonce = crypto.randomBytes(8).toString('hex');
+            
+            const authHeader = generateDigestAuth(username, password, 'GET', url, realm, nonce, qop, nc, cnonce);
+            headers['Authorization'] = authHeader;
+        }
+
         // Faz a requisição HTTP
         const response = await axios.get(url, {
             timeout: 10000, // Timeout de 10 segundos
-            headers: {
-                'User-Agent': 'BMA-Ratchet-Script/1.0.0'
-            }
+            headers: headers
         });
 
         console.log(`✅ Usuário ${participant.nome} registrado com sucesso na catraca ${deviceIp}! Status: ${response.status}`);
@@ -194,12 +224,30 @@ async function registerSingleRatchet(deviceIp) {
         // Monta a URL da requisição
         const url = `http://${deviceIp}/cgi-bin/configManager.cgi?action=setConfig&_EnableUnsecure_.Enable=true`;
 
+        // Configuração de autenticação digest
+        const username = process.env.DIGEST_USERNAME;
+        const password = process.env.DIGEST_PASSWORD;
+        
+        let headers = {
+            'User-Agent': 'BMA-Ratchet-Script/1.0.0'
+        };
+
+        // Se username e password estão definidos, adiciona autenticação digest
+        if (username && password) {
+            const realm = 'Digest';
+            const nonce = crypto.randomBytes(16).toString('hex');
+            const qop = 'auth';
+            const nc = '00000001';
+            const cnonce = crypto.randomBytes(8).toString('hex');
+            
+            const authHeader = generateDigestAuth(username, password, 'GET', url, realm, nonce, qop, nc, cnonce);
+            headers['Authorization'] = authHeader;
+        }
+
         // Faz a requisição HTTP
         const response = await axios.get(url, {
             timeout: 10000, // Timeout de 10 segundos
-            headers: {
-                'User-Agent': 'BMA-Ratchet-Script/1.0.0'
-            }
+            headers: headers
         });
 
         console.log(`✅ Sucesso para ${deviceIp}! Status: ${response.status}`);
