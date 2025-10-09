@@ -1,5 +1,6 @@
 const axios = require('axios');
 const crypto = require('crypto');
+const AxiosDigestAuth = require('@mhoc/axios-digest-auth').default;
 require('dotenv').config();
 
 /**
@@ -78,21 +79,16 @@ async function registerUserInRatchet(deviceIp, participant) {
         };
 
         // Se username e password estão definidos, adiciona autenticação digest
-        if (username && password) {
-            const realm = 'Digest';
-            const nonce = crypto.randomBytes(16).toString('hex');
-            const qop = 'auth';
-            const nc = '00000001';
-            const cnonce = crypto.randomBytes(8).toString('hex');
-            
-            const authHeader = generateDigestAuth(username, password, 'GET', url, realm, nonce, qop, nc, cnonce);
-            headers['Authorization'] = authHeader;
-        }
+        const axiosDigest = new AxiosDigestAuth({
+            username,
+            password
+        })
 
         // Faz a requisição HTTP
-        const response = await axios.get(url, {
-            timeout: 10000, // Timeout de 10 segundos
-            headers: headers
+        const response = await axiosDigest.request({
+            headers: headers,
+            method: 'GET',
+            url
         });
 
         console.log(`✅ Usuário ${participant.nome} registrado com sucesso na catraca ${deviceIp}! Status: ${response.status}`);
@@ -233,21 +229,16 @@ async function registerSingleRatchet(deviceIp) {
         };
 
         // Se username e password estão definidos, adiciona autenticação digest
-        if (username && password) {
-            const realm = 'Digest';
-            const nonce = crypto.randomBytes(16).toString('hex');
-            const qop = 'auth';
-            const nc = '00000001';
-            const cnonce = crypto.randomBytes(8).toString('hex');
-            
-            const authHeader = generateDigestAuth(username, password, 'GET', url, realm, nonce, qop, nc, cnonce);
-            headers['Authorization'] = authHeader;
-        }
+        const axiosDigest = new AxiosDigestAuth({
+            username,
+            password
+        })
 
         // Faz a requisição HTTP
-        const response = await axios.get(url, {
-            timeout: 10000, // Timeout de 10 segundos
-            headers: headers
+        const response = await axiosDigest.request({
+            headers: headers,
+            method: 'GET',
+            url
         });
 
         console.log(`✅ Sucesso para ${deviceIp}! Status: ${response.status}`);
