@@ -36,14 +36,16 @@ async function registerUser({ deviceIp, participant, skipCache = false }) {
         }
 
         // Processa o nome para o CardName
-        // Remove "convidado", remove hífens, pega os dois primeiros nomes
+        // Remove "convidado", remove hífens, remove artigos (de, da, do, dos, das), pega os dois primeiros nomes
         let processedName = participant.nome
             .toLowerCase()
             .replace(/convidado/gi, '') // Remove a palavra "convidado" (case insensitive)
+            .replace(/convidado simepe/gi, '') // Remove a palavra "CONVIDADO SIMEPE" (case insensitive)
             .replace(/-/g, '') // Remove hífens
             .trim()
             .split(/\s+/) // Divide por espaços
-            .slice(0, 2) // Pega apenas os dois primeiros nomes
+            .filter(word => !['de', 'da', 'do', 'dos', 'das'].includes(word)) // Remove artigos
+            .slice(0, 3) // Pega apenas os dois primeiros nomes
             .join(' '); // Junta com espaço entre os nomes
         
         // Monta a URL da requisição
