@@ -2,6 +2,8 @@ const axios = require('axios');
 const crypto = require('crypto');
 const AxiosDigestAuth = require('@mhoc/axios-digest-auth').default;
 const redisCache = require('./redis-cache');
+const Piscina = require('piscina');
+const path = require('path');
 require('dotenv').config();
 
 /**
@@ -142,9 +144,11 @@ async function registerUserInRatchet(deviceIp, participant, skipCache = false) {
 }
 
 /**
- * Registra todos os usuários em todas as catracas
+ * Registra todos os usuários em todas as catracas (com multi-threading usando Piscina)
  */
 async function registerAllUsersInAllRatchets(options = {}) {
+    let piscina = null;
+    
     try {
         // Inicializa o cache Redis
         console.log('🔌 Conectando ao Redis...');
@@ -154,6 +158,8 @@ async function registerAllUsersInAllRatchets(options = {}) {
         const deviceIps = process.env.DEVICE_IPS;
         const baseUrl = process.env.BASE_URL;
         const skipCache = options.skipCache || false;
+        const useMultiThreading = options.useMultiThreading !== false; // Ativo por padrão
+        const maxConcurrency = options.maxConcurrency || 10; // Número de workers simultâneos
 
         if (!deviceIps) {
             throw new Error('Variável de ambiente DEVICE_IPS não está definida');
@@ -175,6 +181,12 @@ async function registerAllUsersInAllRatchets(options = {}) {
         
         console.log(`🚀 Iniciando registro de ${participants.length} usuários em ${ipArray.length} catracas...`);
         console.log(`IPs das catracas: ${ipArray.join(', ')}`);
+        
+        if (useMultiThreading) {
+            console.log(`⚡ Multi-threading habilitado com ${maxConcurrency} workers simultâneos`);
+        } else {
+            console.log(`📋 Processamento sequencial (single-thread)`);
+        }
 
         const results = [];
         let totalOperations = 0;
@@ -182,7 +194,8 @@ async function registerAllUsersInAllRatchets(options = {}) {
         let errorCount = 0;
         let skippedCount = 0;
 
-        // Processa cada participante em cada catraca
+        // Cria todas as tarefas
+        const tasks = [];
         for (let i = 0; i < participants.length; i++) {
             const participant = participants[i];
             
@@ -190,16 +203,60 @@ async function registerAllUsersInAllRatchets(options = {}) {
                 const deviceIp = ipArray[j];
                 totalOperations++;
                 
-                const result = await registerUserInRatchet(deviceIp, participant, skipCache);
+                tasks.push({
+                    deviceIp,
+                    participant,
+                    skipCache
+                });
+            }
+        }
+
+        console.log(`📦 Total de ${tasks.length} tarefas criadas`);
+        
+        if (useMultiThreading) {
+            // Modo multi-threading com Piscina
+            piscina = new Piscina({
+                filename: path.resolve(__dirname, 'worker-register-user.js'),
+                maxThreads: maxConcurrency,
+                minThreads: Math.min(2, maxConcurrency)
+            });
+
+            // Processa todas as tarefas em paralelo com limite de concorrência
+            let completedCount = 0;
+            const promises = tasks.map(async (task) => {
+                const result = await piscina.run(task);
+                
+                completedCount++;
+                
+                // Log de progresso
+                if (completedCount % 10 === 0 || completedCount === tasks.length) {
+                    console.log(`📊 Progresso: ${completedCount}/${tasks.length} (${((completedCount/tasks.length)*100).toFixed(1)}%)`);
+                }
+                
+                // Log individual do resultado
+                if (result.success && result.skipped) {
+                    console.log(`⏭️  SKIP: ${result.participant.nome} (${result.participant.codigo_de_convite}) já registrado na catraca ${result.deviceIp} (cache)`);
+                } else if (result.success) {
+                    console.log(`✅ Registrado: ${result.participant.nome} (${result.participant.codigo_de_convite}) na catraca ${result.deviceIp}`);
+                } else {
+                    console.log(`❌ Erro: ${result.participant.nome} (${result.participant.codigo_de_convite}) na catraca ${result.deviceIp} - ${result.error}`);
+                }
+                
+                return result;
+            });
+
+            results.push(...await Promise.all(promises));
+        } else {
+            // Modo sequencial (backward compatibility)
+            for (let i = 0; i < tasks.length; i++) {
+                const task = tasks[i];
+                
+                const result = await registerUserInRatchet(task.deviceIp, task.participant, task.skipCache);
                 results.push(result);
                 
-                if (result.success) {
-                    if (result.skipped) {
-                        skippedCount++;
-                    }
-                    successCount++;
-                } else {
-                    errorCount++;
+                // Log de progresso
+                if ((i + 1) % 10 === 0 || (i + 1) === tasks.length) {
+                    console.log(`📊 Progresso: ${i + 1}/${tasks.length} (${(((i + 1)/tasks.length)*100).toFixed(1)}%)`);
                 }
 
                 // Pequena pausa entre requisições para não sobrecarregar
@@ -211,6 +268,18 @@ async function registerAllUsersInAllRatchets(options = {}) {
                 }
             }
         }
+        
+        // Processa estatísticas dos resultados
+        results.forEach(result => {
+            if (result.success) {
+                if (result.skipped) {
+                    skippedCount++;
+                }
+                successCount++;
+            } else {
+                errorCount++;
+            }
+        });
 
         // Estatísticas do cache
         const cacheStats = await redisCache.getStats();
@@ -264,6 +333,12 @@ async function registerAllUsersInAllRatchets(options = {}) {
             success: false,
             error: error.message
         };
+    } finally {
+        // Garante que o pool do Piscina seja destruído
+        if (piscina) {
+            await piscina.destroy();
+            console.log('🔌 Pool de workers fechado');
+        }
     }
 }
 
