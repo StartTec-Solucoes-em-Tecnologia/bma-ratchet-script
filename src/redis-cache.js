@@ -12,6 +12,13 @@ class RedisCache {
     }
 
     /**
+     * Verifica se o Redis está conectado e habilitado
+     */
+    isConnected() {
+        return this.isEnabled && this.redis !== null;
+    }
+
+    /**
      * Inicializa a conexão com o Redis
      */
     async connect() {
