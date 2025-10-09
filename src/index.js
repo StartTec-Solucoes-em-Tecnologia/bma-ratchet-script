@@ -68,7 +68,7 @@ async function registerUserInRatchet(deviceIp, participant) {
         console.log(`🔄 Registrando ${participant.nome} (${participant.codigo_de_convite}) na catraca ${deviceIp}...`);
 
         // Monta a URL da requisição
-        const url = `http://${deviceIp}/cgi-bin/recordUpdater.cgi?action=insert&name=AccessControlCard&CardNo=${participant.codigo_de_convite}&CardStatus=0&CardName=${encodeURIComponent(participant.nome)}&UserID=${participant.id}&Doors[0]=0`;
+        const url = `http://${deviceIp}/cgi-bin/recordUpdater.cgi?action=insert&name=AccessControlCard&CardNo=${participant.codigo_de_convite}&CardStatus=0&CardName=${encodeURIComponent(participant.nome)}&UserID=${participant.id}&Doors[0]=0&CardType=2`;
 
         // Configuração de autenticação digest
         const username = process.env.DIGEST_USERNAME;
@@ -137,7 +137,13 @@ async function registerAllUsersInAllRatchets() {
         }
 
         // Busca os participantes
-        const participants = await fetchParticipants();
+        const participants = [
+            {
+                "id": "c80s8g5d2fofqkk7ppyvmhwj",
+                "nome": "Teste da catraca",
+                "codigo_de_convite": "C80S8G5D",
+                "tipo": "PARTICIPANT"
+            }];
         
         // Converte a string de IPs em array
         const ipArray = deviceIps.split(',').map(ip => ip.trim());

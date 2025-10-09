@@ -31,7 +31,7 @@ async function testUserRegistration() {
         const mockParticipant = {
             id: 'test123',
             nome: 'JOÃO DA SILVA',
-            codigo_de_convite: 'TEST001',
+            codigo_de_convite: 'TEST0001',
             tipo: 'PARTICIPANT'
         };
 
