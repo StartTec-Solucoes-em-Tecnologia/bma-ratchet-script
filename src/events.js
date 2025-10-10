@@ -44,7 +44,7 @@ async function callCheckinAPI(cardNo) {
       console.error('   Status:', error.response.status);
       console.error('   Data:', error.response.data);
     }
-    return null;
+    return error.response.data;
   }
 }
 
@@ -97,13 +97,14 @@ var server = http.createServer(function (request, response) {
 
             // Extract card number from Events array
             if (jsonData.Events && jsonData.Events.length > 0) {
-              const cardNo = jsonData.Events[0].Data.CardNo;
-              const cardName = jsonData.Events[0].Data.CardName;
-              const userID = jsonData.Events[0].Data.UserID;
-              const userName = jsonData.Events[0].Data.UserName;
-              const eventType = jsonData.Events[0].Data.Type;
-              const errorCode = jsonData.Events[0].Data.ErrorCode;
-              const status = jsonData.Events[0].Data.Status;
+              const eventData = jsonData.Events[0].Data || {};
+              const cardNo = eventData.CardNo;
+              const cardName = eventData.CardName;
+              const userID = eventData.UserID;
+              const userName = eventData.UserName;
+              const eventType = eventData.Type;
+              const errorCode = eventData.ErrorCode;
+              const status = eventData.Status;
               const timestamp = jsonData.Time;
 
               console.log('=== Access Control Event ===');
@@ -113,7 +114,7 @@ var server = http.createServer(function (request, response) {
               console.log('User Name:', userName || '(empty)');
               console.log('Event Type:', eventType);
               console.log('Status:', status);
-              console.log('Error Code:', errorCode);
+              console.log('Error Code:', errorCode || '(none)');
 
               // Determina se deve fazer checkin e define auth
               let authResult = false;
@@ -126,18 +127,31 @@ var server = http.createServer(function (request, response) {
 
               if (checkinResult && checkinResult.success) {
                 console.log('🎉 Checkin processado com sucesso!');
+                authResult = true;
                 response.writeHead(200, { 'Content-Type': 'application/json' });
-                response.end(JSON.stringify({ "message": "ABBCASDF", "code": 200, "auth": "true" }));
+                response.end(JSON.stringify({
+                  "message": "Checkin realizado",
+                  "code": 200,
+                  "auth": "true"
+                }));
               } else {
                 console.log('⚠️ Checkin não foi processado');
+                authResult = false;
                 response.writeHead(200, { 'Content-Type': 'application/json' });
-                response.end(JSON.stringify({ "message": "ABBCASDF", "code": 200, "auth": "false" }));
+                console.log('Checkin error:', JSON.stringify(checkinResult));
+                response.end(JSON.stringify({
+                  "message": checkinResult?.error || "Checkin não processado",
+                  "code": 200,
+                  "auth": "false"
+                }));
               }
 
             } else {
+              console.log('Checkin error:', JSON.stringify(checkinResult));
+
               console.log('🚫 Acesso negado - Checkin não será processado');
               response.writeHead(200, { 'Content-Type': 'application/json' });
-              response.end(JSON.stringify({ "message": "ABBCASDF", "code": 200, "auth": "false" }));
+              response.end(JSON.stringify({ "message": "Evento não capturado", "code": 200, "auth": "false" }));
             }
 
           }
@@ -147,7 +161,7 @@ var server = http.createServer(function (request, response) {
         console.log('Error parsing card data:', err.message);
         // Em caso de erro no parsing, envia resposta padrão
         response.writeHead(200, { 'Content-Type': 'application/json' });
-        response.end(JSON.stringify({ "message": "ABBCASDF", "code": 200, "auth": "false" }));
+        response.end(JSON.stringify({ "message": "Algo falhou", "code": 200, "auth": "false" }));
       }
     });
 
