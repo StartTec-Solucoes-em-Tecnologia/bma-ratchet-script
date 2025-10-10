@@ -7,6 +7,28 @@ console.log = function () {
   log.apply(console, [date_ob.toLocaleString()].concat(arguments));
 };
 
+/**
+ * Formata timestamp UTC para horário local brasileiro (HH:mm)
+ * O timestamp vem do banco em UTC e precisa ser convertido para localtime
+ */
+function formatTimestampToBrazilianTime(timestamp) {
+  try {
+    // Cria a data a partir do timestamp UTC
+    const utcDate = new Date(timestamp);
+
+    // Converte para horário local brasileiro (America/Sao_Paulo)
+    return utcDate.toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'America/Sao_Paulo',
+      hour12: false
+    });
+  } catch (error) {
+    console.error('Erro ao formatar timestamp UTC para horário local:', error);
+    return 'horário não disponível';
+  }
+}
+
 var http = require('http');
 const axios = require('axios');
 const baseUrl = process.env.BASE_URL;
@@ -134,13 +156,20 @@ var server = http.createServer(function (request, response) {
                   "code": 200,
                   "auth": "true"
                 }));
+
               } else {
+                let message = "";
                 console.log('⚠️ Checkin não foi processado');
                 authResult = false;
                 response.writeHead(200, { 'Content-Type': 'application/json' });
                 console.log('Checkin error:', JSON.stringify(checkinResult));
+                message = checkinResult?.error || "Checkin não processado";
+                if (checkinResult?.error) {
+                  message = `Utilizado às ${formatTimestampToBrazilianTime(checkinResult.data.previousScan)}`;
+                  console.log(message);
+                }
                 response.end(JSON.stringify({
-                  "message": checkinResult?.error || "Checkin não processado",
+                  "message": message,
                   "code": 200,
                   "auth": "false"
                 }));
