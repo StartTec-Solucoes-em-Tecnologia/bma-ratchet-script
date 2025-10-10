@@ -1,4 +1,5 @@
 var log = console.log;
+require('dotenv').config();
 
 console.log = function () {
   let ts = Date.now();
@@ -8,7 +9,7 @@ console.log = function () {
 
 var http = require('http');
 const axios = require('axios');
-
+const baseUrl = process.env.BASE_URL;
 /**
  * Faz chamada para a API de checkin
  */
@@ -16,7 +17,7 @@ async function callCheckinAPI(cardNo) {
   try {
     console.log(`🔄 Fazendo checkin para cartão: ${cardNo}`);
 
-    const response = await axios.post('http://localhost:80/api/open/event/checkin', {
+    const response = await axios.post(`${baseUrl}api/open/event/checkin`, {
       code: cardNo
     }, {
       headers: {
@@ -111,47 +112,43 @@ var server = http.createServer(function (request, response) {
               console.log('User ID:', userID || '(empty)');
               console.log('User Name:', userName || '(empty)');
               console.log('Event Type:', eventType);
-              console.log('Status:', status === 1 ? 'GRANTED ✓' : 'DENIED ✗');
+              console.log('Status:', status);
               console.log('Error Code:', errorCode);
 
               // Determina se deve fazer checkin e define auth
               let authResult = false;
 
-              if (status === 1 && errorCode === 0) {
-                console.log('🎫 Codigo Capturado - Iniciando processo de checkin...');
+              console.log('🎫 Codigo Capturado - Iniciando processo de checkin...');
 
-                try {
-                  const checkinResult = await callCheckinAPI(cardNo);
-                  if (checkinResult && checkinResult.success) {
-                    console.log('🎉 Checkin processado com sucesso!');
-                    authResult = true;
-                  } else {
-                    console.log('⚠️ Checkin não foi processado');
-                    authResult = false;
-                  }
-                } catch (err) {
-                  console.error('💥 Erro no processo de checkin:', err.message);
-                  authResult = false;
-                }
+
+              const checkinResult = await callCheckinAPI(cardNo);
+              console.log('Checkin Result:', JSON.stringify(checkinResult));
+
+              if (checkinResult && checkinResult.success) {
+                console.log('🎉 Checkin processado com sucesso!');
+                response.writeHead(200, { 'Content-Type': 'application/json' });
+                response.end(JSON.stringify({ "message": "ABBCASDF", "code": 200, "auth": "true" }));
               } else {
-                console.log('🚫 Acesso negado - Checkin não será processado');
-                authResult = false;
+                console.log('⚠️ Checkin não foi processado');
+                response.writeHead(200, { 'Content-Type': 'application/json' });
+                response.end(JSON.stringify({ "message": "ABBCASDF", "code": 200, "auth": "false" }));
               }
 
-              if (errorCode !== 0) {
-                console.log('*** ACCESS DENIED - Error:', errorCode);
-              }
-              console.log('Timestamp:', timestamp);
-              console.log('===========================');
+            } else {
+              console.log('🚫 Acesso negado - Checkin não será processado');
+              response.writeHead(200, { 'Content-Type': 'application/json' });
+              response.end(JSON.stringify({ "message": "ABBCASDF", "code": 200, "auth": "false" }));
             }
+
           }
         }
+
       } catch (err) {
         console.log('Error parsing card data:', err.message);
+        // Em caso de erro no parsing, envia resposta padrão
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ "message": "ABBCASDF", "code": 200, "auth": "false" }));
       }
-
-      response.writeHead(200, { 'Content-Type': 'application/json' });
-      response.end(JSON.stringify({ "message": "ABBCASDF", "code": 200, "auth": authResult }));
     });
 
   }
