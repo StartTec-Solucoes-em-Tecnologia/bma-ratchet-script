@@ -138,11 +138,22 @@ var server = http.createServer(function (request, response) {
               console.log('Status:', status);
               console.log('Error Code:', errorCode || '(none)');
 
+              // Validação instantânea: rejeita se o código estiver vazio ou inválido
+              if (!cardNo || cardNo.trim() === '') {
+                console.log('🚫 Código inválido - Rejeição instantânea');
+                response.writeHead(200, { 'Content-Type': 'application/json' });
+                response.end(JSON.stringify({
+                  "message": "não aceitamos facial",
+                  "code": 200,
+                  "auth": "false"
+                }));
+                return; // Importante: retorna para evitar processamento adicional
+              }
+
               // Determina se deve fazer checkin e define auth
               let authResult = false;
 
               console.log('🎫 Codigo Capturado - Iniciando processo de checkin...');
-
 
               const checkinResult = await callCheckinAPI(cardNo);
               console.log('Checkin Result:', JSON.stringify(checkinResult));
@@ -163,11 +174,21 @@ var server = http.createServer(function (request, response) {
                 authResult = false;
                 response.writeHead(200, { 'Content-Type': 'application/json' });
                 console.log('Checkin error:', JSON.stringify(checkinResult));
-                message = checkinResult?.error || "Checkin não processado";
-                if (checkinResult?.error) {
+
+                // Tratamento específico para diferentes tipos de erro
+                if (checkinResult?.error === "Código obrigatório" ||
+                  checkinResult?.message === "O código do convite é obrigatório") {
+                  message = "não aceitamos facial";
+                } else if (checkinResult?.error === "Convite não encontrado" ||
+                  checkinResult?.message === "Nenhum convite encontrado com este código") {
+                  message = "convite não encontrado";
+                } else if (checkinResult?.error && checkinResult?.data?.previousScan) {
                   message = `Utilizado às ${formatTimestampToBrazilianTime(checkinResult.data.previousScan)}`;
                   console.log(message);
+                } else {
+                  message = "não aceitamos facial";
                 }
+
                 response.end(JSON.stringify({
                   "message": message,
                   "code": 200,
@@ -176,9 +197,7 @@ var server = http.createServer(function (request, response) {
               }
 
             } else {
-              console.log('Checkin error:', JSON.stringify(checkinResult));
-
-              console.log('🚫 Acesso negado - Checkin não será processado');
+              console.log('🚫 Acesso negado - Evento não capturado');
               response.writeHead(200, { 'Content-Type': 'application/json' });
               response.end(JSON.stringify({ "message": "Evento não capturado", "code": 200, "auth": "false" }));
             }
