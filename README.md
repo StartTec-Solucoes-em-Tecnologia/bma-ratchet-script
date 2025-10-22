@@ -1,6 +1,15 @@
 # BMA Ratchet Script
 
-Script para cadastrar múltiplas catracas via API, registrar usuários nas catracas e registrar faces biométricas em leitoras faciais com sistema de testes automatizados.
+Script para cadastrar múltiplas catracas via API, registrar usuários nas catracas e registrar faces biométricas em leitoras faciais com sistema completo de verificação, cache Redis e testes automatizados.
+
+## 🆕 Versão 2.0 - Registro Facial Completo
+
+O sistema de registro facial foi completamente atualizado com:
+- ✅ **Verificação automática** de usuários existentes
+- ✅ **Remoção inteligente** antes do cadastro (evita duplicatas)
+- ✅ **Cadastro de usuário** + **Cadastro de face** em sequência
+- ✅ **Cache Redis** para rastreamento de registros
+- ✅ **Relatórios expandidos** com estatísticas detalhadas
 
 ## 📁 Estrutura do Projeto
 
@@ -80,7 +89,7 @@ npm run test:watch
 
 Para mais detalhes, consulte `docs/USER-REGISTRATION.md`.
 
-### Para Registro de Faces Biométricas
+### Para Registro de Faces Biométricas (v2.0)
 1. Copie o arquivo `.env.example` para `.env`: `cp .env.example .env`
 2. Configure as variáveis:
    - `DATABASE_URL`: String de conexão PostgreSQL
@@ -88,9 +97,13 @@ Para mais detalhes, consulte `docs/USER-REGISTRATION.md`.
    - `FACE_READER_IPS`: IPs das leitoras faciais separados por vírgula
    - `DIGEST_USERNAME`: Username para autenticação digest HTTP
    - `DIGEST_PASSWORD`: Password para autenticação digest HTTP
-3. Execute `npm run register-faces`
+   - `REDIS_URL`: URL do Redis (ex: redis://localhost:6379) **[NOVO]**
+3. Certifique-se que o Redis está rodando: `redis-server`
+4. Execute `npm run register-faces`
 
-Para mais detalhes, consulte `docs/FACIAL-REGISTRATION.md`.
+**Novo em v2.0**: O script agora cadastra o usuário ANTES da face, verifica duplicatas e salva no Redis.
+
+Para mais detalhes, consulte `docs/FACIAL-REGISTRATION-V2.md`.
 
 ## 🔐 Autenticação Digest HTTP
 
@@ -124,6 +137,7 @@ nano .env
 - `EVENT_ID`: ID do evento
 - `DEVICE_IPS`: IPs das catracas (separados por vírgula)
 - `FACE_READER_IPS`: IPs das leitoras faciais (separados por vírgula)
+- `REDIS_URL`: URL do Redis para cache (ex: redis://localhost:6379) **[NOVO v2.0]**
 - `DIGEST_USERNAME`: Username para autenticação digest (opcional)
 - `DIGEST_PASSWORD`: Password para autenticação digest (opcional)
 
@@ -144,7 +158,8 @@ Para mais detalhes sobre os testes, consulte `docs/TEST-README.md`.
 - **Documentação Principal**: `docs/README.md`
 - **Documentação dos Testes**: `docs/TEST-README.md`
 - **Registro de Usuários**: `docs/USER-REGISTRATION.md`
-- **Registro de Faces Biométricas**: `docs/FACIAL-REGISTRATION.md`
+- **Registro de Faces v2.0 (Completo)**: `docs/FACIAL-REGISTRATION-V2.md` ⭐ **Recomendado**
+- **Registro de Faces v1.0**: `docs/FACIAL-REGISTRATION.md`
 
 ## 🔧 Scripts Disponíveis
 
