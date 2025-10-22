@@ -1,0 +1,224 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model account {
+  id                       String    @id
+  account_id               String
+  provider_id              String
+  user_id                  String
+  access_token             String?
+  refresh_token            String?
+  id_token                 String?
+  access_token_expires_at  DateTime? @db.Timestamp(6)
+  refresh_token_expires_at DateTime? @db.Timestamp(6)
+  scope                    String?
+  password                 String?
+  created_at               DateTime  @default(now()) @db.Timestamp(6)
+  updated_at               DateTime? @db.Timestamp(6)
+  user                     user      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "account_user_id_user_id_fk")
+}
+
+model address {
+  id           String    @id @db.VarChar(256)
+  street       String    @db.VarChar(256)
+  number       String    @db.VarChar(20)
+  complement   String?   @db.VarChar(256)
+  neighborhood String    @db.VarChar(256)
+  city         String    @db.VarChar(256)
+  state        String    @db.VarChar(2)
+  zip_code     String    @db.VarChar(8)
+  country      String    @default("Brasil") @db.VarChar(256)
+  created_at   DateTime  @default(now()) @db.Timestamp(6)
+  updated_at   DateTime? @db.Timestamp(6)
+  event        event[]
+}
+
+model company {
+  id            String    @id @db.VarChar(256)
+  social_reason String    @db.VarChar(256)
+  cnpj          String    @db.VarChar(14)
+  email         String    @db.VarChar(256)
+  contact       String?   @db.VarChar(256)
+  created_at    DateTime  @default(now()) @db.Timestamp(6)
+  updated_at    DateTime? @db.Timestamp(6)
+  event         event[]
+}
+
+model event {
+  id                   String                 @id @db.VarChar(256)
+  name                 String                 @db.VarChar(256)
+  description          String?                @db.VarChar(562)
+  status               status                 @default(CLOSED)
+  start_at             DateTime?              @db.Timestamp(6)
+  end_at               DateTime?              @db.Timestamp(6)
+  capacity             Int?
+  category             String                 @db.VarChar(256)
+  type                 type?
+  company_id           String?                @db.VarChar(256)
+  banner               String?                @db.VarChar(256)
+  address_id           String?                @db.VarChar(256)
+  created_at           DateTime               @default(now()) @db.Timestamp(6)
+  updated_at           DateTime?              @db.Timestamp(6)
+  credential_type      credential_type?       @default(QRCODE)
+  address              address?               @relation(fields: [address_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "event_address_id_address_id_fk")
+  company              company?               @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "event_company_id_company_id_fk")
+  invite               invite[]
+  participant_to_event participant_to_event[]
+}
+
+model guest {
+  id              String           @id @db.VarChar(256)
+  name            String?          @db.VarChar(256)
+  cellphone       String?          @db.VarChar(256)
+  type            guest_type_enum? @default(NORMAL)
+  invitation_code String?          @db.VarChar(256)
+  participant_id  String?          @db.VarChar(256)
+  event_id        String           @db.VarChar(256)
+  created_at      DateTime         @default(now()) @db.Timestamp(6)
+  updated_at      DateTime?        @db.Timestamp(6)
+  email           String?          @db.VarChar(256)
+  deleted_at      DateTime?        @db.Timestamp(6)
+  facial_image    String?          @db.VarChar(512)
+  participant     participant?     @relation(fields: [participant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "guest_participant_id_participant_id_fk")
+  invite          invite[]
+}
+
+model invite {
+  id             String       @id @db.VarChar(256)
+  type           invite_type  @default(PARTICIPANT)
+  link           String       @db.VarChar(256)
+  code           String       @db.VarChar(256)
+  participant_id String?      @db.VarChar(256)
+  event_id       String       @db.VarChar(256)
+  created_at     DateTime     @default(now()) @db.Timestamp(6)
+  updated_at     DateTime?    @db.Timestamp(6)
+  deleted_at     DateTime?    @db.Timestamp(6)
+  guest_id       String?      @db.VarChar(256)
+  scanned_at     DateTime?    @db.Timestamp(6)
+  event          event        @relation(fields: [event_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "invite_event_id_event_id_fk")
+  guest          guest?       @relation(fields: [guest_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "invite_guest_id_guest_id_fk")
+  participant    participant? @relation(fields: [participant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "invite_participant_id_participant_id_fk")
+
+  @@index([id, deleted_at], map: "invite_checkin_idx")
+  @@index([deleted_at])
+  @@index([event_id])
+  @@index([guest_id])
+  @@index([id], map: "invite_id_prefix_idx")
+  @@index([participant_id])
+}
+
+model logs {
+  id         String    @id @db.VarChar
+  user_id    String    @db.VarChar
+  log        Json?     @db.Json
+  created_at DateTime  @default(now()) @db.Timestamp(6)
+  updated_at DateTime? @db.Timestamp(6)
+  user       user      @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "logs_user_id_user_id_fk")
+}
+
+model participant {
+  id                   String                     @id @db.VarChar(256)
+  external_id          String?                    @db.VarChar(256)
+  name                 String?                    @db.VarChar(256)
+  document             String?                    @db.VarChar(256)
+  document_type        participant_document_type? @default(CPF)
+  cellphone            String?                    @db.VarChar(256)
+  email                String?                    @db.VarChar(256)
+  created_at           DateTime                   @default(now()) @db.Timestamp(6)
+  updated_at           DateTime?                  @db.Timestamp(6)
+  photo                String?                    @db.VarChar(256)
+  facial_image         String?                    @db.VarChar(512)
+  guest                guest[]
+  invite               invite[]
+  participant_to_event participant_to_event[]
+}
+
+model participant_to_event {
+  participant_id String                       @db.VarChar(256)
+  event_id       String                       @db.VarChar(256)
+  status         participant_to_event_status? @default(INTEREST)
+  event          event                        @relation(fields: [event_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "participant_to_event_event_id_event_id_fk")
+  participant    participant                  @relation(fields: [participant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "participant_to_event_participant_id_participant_id_fk")
+
+  @@id([event_id, participant_id], map: "participant_to_event_event_id_participant_id_pk")
+}
+
+model session {
+  id         String   @id
+  expires_at DateTime @db.Timestamp(6)
+  token      String   @unique(map: "session_token_unique")
+  created_at DateTime @db.Timestamp(6)
+  updated_at DateTime @db.Timestamp(6)
+  ip_address String?
+  user_agent String?
+  user_id    String
+  user       user     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "session_user_id_user_id_fk")
+}
+
+model user {
+  id             String    @id
+  name           String
+  email          String    @unique(map: "user_email_unique")
+  email_verified Boolean
+  role           String    @default("ADMIN")
+  image          String?
+  created_at     DateTime  @default(now()) @db.Timestamp(6)
+  updated_at     DateTime? @db.Timestamp(6)
+  account        account[]
+  logs           logs[]
+  session        session[]
+}
+
+model verification {
+  id         String    @id
+  identifier String
+  value      String
+  expires_at DateTime  @db.Timestamp(6)
+  created_at DateTime  @default(now()) @db.Timestamp(6)
+  updated_at DateTime? @db.Timestamp(6)
+}
+
+enum credential_type {
+  FACIAL
+  QRCODE
+}
+
+enum guest_type_enum {
+  NORMAL
+  COMPANY
+  SPONSOR
+}
+
+enum invite_type {
+  GUEST
+  PARTICIPANT
+}
+
+enum participant_document_type {
+  CPF
+  CRM
+}
+
+enum participant_to_event_status {
+  INTEREST
+  CONFIRMED
+  DENIED
+}
+
+enum status {
+  CLOSED
+  OPEN
+  FINISHED
+}
+
+enum type {
+  PUBLIC
+  PRIVATE
+  INVITATION
+}

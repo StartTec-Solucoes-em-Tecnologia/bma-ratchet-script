@@ -5,21 +5,25 @@
   "scripts": {
     "start": "node src/index.js",
     "register-users": "node src/index.js --register-users",
+    "register-faces": "node src/facial-registration.js",
     "test": "node test/test-simple.js",
     "test:simple": "node test/test-simple.js",
     "test:mock": "node test/test.js",
     "test:users": "node test/test-user-registration.js",
+    "test:faces": "node test/test-facial-registration.js",
     "test:digest": "node test/test-digest-auth.js",
     "test:watch": "nodemon test/test-simple.js",
     "test:verbose": "node test/test-simple.js --verbose"
   },
   "dependencies": {
     "@mhoc/axios-digest-auth": "^0.8.0",
+    "@prisma/client": "^6.18.0",
     "axios": "^1.12.2",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "http": "0.0.1-security",
-    "http-auth": "^4.2.1"
+    "http-auth": "^4.2.1",
+    "sharp": "^0.34.4"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
