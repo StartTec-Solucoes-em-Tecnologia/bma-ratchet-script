@@ -2,14 +2,23 @@
 
 Script para cadastrar múltiplas catracas via API, registrar usuários nas catracas e registrar faces biométricas em leitoras faciais com sistema completo de verificação, cache Redis e testes automatizados.
 
-## 🆕 Versão 2.0 - Registro Facial Completo
+## 🆕 Novidades
 
+### Versão 2.0 - Registro Facial Completo
 O sistema de registro facial foi completamente atualizado com:
 - ✅ **Verificação automática** de usuários existentes
 - ✅ **Remoção inteligente** antes do cadastro (evita duplicatas)
 - ✅ **Cadastro de usuário** + **Cadastro de face** em sequência
 - ✅ **Cache Redis** para rastreamento de registros
 - ✅ **Relatórios expandidos** com estatísticas detalhadas
+
+### 🌐 Servidor de Checkin Intelbras (NOVO!)
+Servidor Express para receber eventos de checkin dos leitores faciais:
+- ✅ **Escuta eventos HTTP** dos leitores Intelbras
+- ✅ **Parse automático** de payloads multipart/mixed
+- ✅ **Atualização de scanned_at** no banco de dados
+- ✅ **Sempre retorna sucesso** (evita retry loops)
+- ✅ **Logs detalhados** de cada checkin
 
 ## 📁 Estrutura do Projeto
 

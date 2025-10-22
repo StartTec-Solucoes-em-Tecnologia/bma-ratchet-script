@@ -6,6 +6,8 @@
     "start": "node src/index.js",
     "register-users": "node src/index.js --register-users",
     "register-faces": "node src/facial-registration.js",
+    "checkin-server": "node src/checkin-server.js",
+    "checkin-server:dev": "nodemon src/checkin-server.js",
     "test": "node test/test-simple.js",
     "test:simple": "node test/test-simple.js",
     "test:mock": "node test/test.js",

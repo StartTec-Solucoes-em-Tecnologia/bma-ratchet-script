@@ -98,7 +98,7 @@ async function fetchInvitesWithFacialImages() {
             .map(invite => {
                 if (invite.participant && invite.participant.facial_image) {
                     return {
-                        userId: invite.participant.id,
+                        userId: invite.id,
                         name: invite.participant.name || 'Sem nome',
                         facialImageUrl: invite.participant.facial_image,
                         document: invite.participant.document || '',
@@ -109,7 +109,7 @@ async function fetchInvitesWithFacialImages() {
                     };
                 } else if (invite.guest && invite.guest.facial_image) {
                     return {
-                        userId: invite.guest.id,
+                        userId: invite.id,
                         name: invite.guest.name || 'Sem nome',
                         facialImageUrl: invite.guest.facial_image,
                         document: '',
