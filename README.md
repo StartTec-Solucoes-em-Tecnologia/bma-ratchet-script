@@ -26,7 +26,8 @@ Servidor Express para receber eventos de checkin dos leitores faciais:
 bma-ratchet-script/
 ├── src/                       # Código fonte principal
 │   ├── index.js              # Script principal de registro de catracas
-│   └── facial-registration.js # Script de registro de faces biométricas
+│   ├── facial-registration.js # Script de registro de faces biométricas v2.0
+│   └── checkin-server.js     # Servidor de checkin Intelbras (NOVO)
 ├── test/                     # Scripts de teste
 │   ├── test-simple.js        # Testes simples (recomendado)
 │   └── test.js               # Testes com servidor mock
@@ -34,7 +35,8 @@ bma-ratchet-script/
 │   ├── README.md             # Documentação original
 │   ├── TEST-README.md        # Documentação dos testes
 │   ├── USER-REGISTRATION.md  # Documentação de registro de usuários
-│   └── FACIAL-REGISTRATION.md # Documentação de registro facial
+│   ├── FACIAL-REGISTRATION-V2.md # Documentação de registro facial v2.0
+│   └── CHECKIN-SERVER.md     # Documentação do servidor de checkin (NOVO)
 ├── package.json              # Configurações do projeto
 └── README.md                 # Este arquivo
 ```
@@ -47,6 +49,8 @@ npm install
 ```
 
 ### Execução
+
+#### Scripts
 ```bash
 # Configuração de catracas (modo padrão)
 npm start
@@ -56,6 +60,18 @@ npm run register-users
 
 # Registro de faces biométricas em leitoras faciais
 npm run register-faces
+```
+
+#### Servidor de Checkin (NOVO)
+```bash
+# Iniciar servidor de checkin (produção)
+npm run checkin-server
+
+# Iniciar servidor com auto-reload (desenvolvimento)
+npm run checkin-server:dev
+
+# O servidor ficará escutando em http://localhost:3001
+# Endpoint: POST /api/open/checkin/intelbras-reader/
 ```
 
 ### Testes
@@ -114,6 +130,19 @@ Para mais detalhes, consulte `docs/USER-REGISTRATION.md`.
 
 Para mais detalhes, consulte `docs/FACIAL-REGISTRATION-V2.md`.
 
+### Para Servidor de Checkin Intelbras (NOVO)
+1. Copie o arquivo `.env.example` para `.env`: `cp .env.example .env`
+2. Configure as variáveis:
+   - `DATABASE_URL`: String de conexão PostgreSQL
+   - `CHECKIN_SERVER_PORT`: Porta do servidor (padrão: 3001)
+3. Execute `npm run checkin-server`
+4. Configure o leitor Intelbras para enviar eventos para:
+   - URL: `http://seu-servidor:3001/api/open/checkin/intelbras-reader/`
+
+**Funcionalidade**: O servidor recebe eventos HTTP dos leitores faciais e atualiza automaticamente o campo `scanned_at` dos convites no banco de dados.
+
+Para mais detalhes, consulte `docs/CHECKIN-SERVER.md`.
+
 ## 🔐 Autenticação Digest HTTP
 
 O script suporta autenticação digest HTTP para as requisições às catracas. Para habilitar:
@@ -141,12 +170,13 @@ nano .env
 ```
 
 **Variáveis disponíveis:**
-- `DATABASE_URL`: String de conexão PostgreSQL (para registro facial)
+- `DATABASE_URL`: String de conexão PostgreSQL (registro facial e checkin server)
 - `BASE_URL`: URL base da API (para registro de usuários)
 - `EVENT_ID`: ID do evento
 - `DEVICE_IPS`: IPs das catracas (separados por vírgula)
 - `FACE_READER_IPS`: IPs das leitoras faciais (separados por vírgula)
 - `REDIS_URL`: URL do Redis para cache (ex: redis://localhost:6379) **[NOVO v2.0]**
+- `CHECKIN_SERVER_PORT`: Porta do servidor de checkin (padrão: 3001) **[NOVO]**
 - `DIGEST_USERNAME`: Username para autenticação digest (opcional)
 - `DIGEST_PASSWORD`: Password para autenticação digest (opcional)
 
@@ -168,6 +198,7 @@ Para mais detalhes sobre os testes, consulte `docs/TEST-README.md`.
 - **Documentação dos Testes**: `docs/TEST-README.md`
 - **Registro de Usuários**: `docs/USER-REGISTRATION.md`
 - **Registro de Faces v2.0 (Completo)**: `docs/FACIAL-REGISTRATION-V2.md` ⭐ **Recomendado**
+- **Servidor de Checkin Intelbras**: `docs/CHECKIN-SERVER.md` ⭐ **NOVO**
 - **Registro de Faces v1.0**: `docs/FACIAL-REGISTRATION.md`
 
 ## 🔧 Scripts Disponíveis
@@ -176,6 +207,10 @@ Para mais detalhes sobre os testes, consulte `docs/TEST-README.md`.
 - `npm start` - Configuração de catracas (modo padrão)
 - `npm run register-users` - Registro de usuários em catracas
 - `npm run register-faces` - Registro de faces biométricas em leitoras faciais
+- `npm run checkin-server` - Servidor de checkin Intelbras **[NOVO]**
+
+### Desenvolvimento
+- `npm run checkin-server:dev` - Servidor de checkin com auto-reload **[NOVO]**
 
 ### Testes
 - `npm test` - Executa testes simples

@@ -3,12 +3,16 @@ const sharp = require('sharp');
 const AxiosDigestAuth = require('@mhoc/axios-digest-auth').default;
 const { PrismaClient } = require('@prisma/client');
 const redis = require('redis');
+const { Queue, Worker } = require('bullmq');
+const IORedis = require('ioredis');
 require('dotenv').config();
 
 const prisma = new PrismaClient();
 
 // Inicializa cliente Redis
 let redisClient = null;
+let ioredisClient = null;
+let queues = new Map(); // Map para armazenar filas por dispositivo
 
 /**
  * Script para registrar usuários e faces de participantes/convidados em leitoras faciais
@@ -31,6 +35,105 @@ async function initRedis() {
         return redisClient;
     } catch (error) {
         console.warn('⚠️  Redis não disponível, continuando sem cache:', error.message);
+        return null;
+    }
+}
+
+/**
+ * Inicializa cliente IORedis para BullMQ
+ */
+async function initIORedis() {
+    try {
+        const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+        ioredisClient = new IORedis(redisUrl, {
+            maxRetriesPerRequest: 3,
+            retryDelayOnFailover: 100,
+        });
+        
+        ioredisClient.on('error', (err) => console.error('❌ IORedis Error:', err));
+        
+        console.log('✅ Conectado ao IORedis para BullMQ\n');
+        return ioredisClient;
+    } catch (error) {
+        console.warn('⚠️  IORedis não disponível, continuando sem filas:', error.message);
+        return null;
+    }
+}
+
+/**
+ * Separa nome completo em nome e sobrenome
+ */
+function splitName(fullName) {
+    if (!fullName || typeof fullName !== 'string') {
+        return { firstName: 'Usuario', lastName: 'Sem Nome' };
+    }
+    
+    const nameParts = fullName.trim().split(/\s+/);
+    
+    if (nameParts.length === 1) {
+        return { firstName: nameParts[0], lastName: 'Sem Sobrenome' };
+    }
+    
+    const firstName = nameParts[0];
+    const lastName = nameParts.slice(1).join(' ');
+    
+    return { firstName, lastName };
+}
+
+/**
+ * Cria fila BullMQ para um dispositivo específico
+ */
+function createQueueForDevice(deviceIp) {
+    if (!ioredisClient) {
+        console.warn(`⚠️  IORedis não disponível, pulando fila para ${deviceIp}`);
+        return null;
+    }
+    
+    const queueName = `facial-registration-${deviceIp.replace(/\./g, '-')}`;
+    
+    if (queues.has(deviceIp)) {
+        return queues.get(deviceIp);
+    }
+    
+    const queue = new Queue(queueName, {
+        connection: ioredisClient,
+        defaultJobOptions: {
+            removeOnComplete: 10, // Manter apenas 10 jobs completos
+            removeOnFail: 5,      // Manter apenas 5 jobs falhados
+            attempts: 3,          // Tentar 3 vezes em caso de falha
+            backoff: {
+                type: 'exponential',
+                delay: 2000,
+            },
+        },
+    });
+    
+    queues.set(deviceIp, queue);
+    console.log(`📋 Fila criada para dispositivo ${deviceIp}: ${queueName}`);
+    
+    return queue;
+}
+
+/**
+ * Adiciona job à fila de um dispositivo
+ */
+async function addJobToQueue(deviceIp, jobData) {
+    const queue = createQueueForDevice(deviceIp);
+    if (!queue) {
+        console.warn(`⚠️  Não foi possível criar fila para ${deviceIp}, processando síncrono`);
+        return null;
+    }
+    
+    try {
+        const job = await queue.add('process-user', jobData, {
+            priority: jobData.priority || 0,
+            delay: jobData.delay || 0,
+        });
+        
+        console.log(`📝 Job adicionado à fila ${deviceIp}: ${job.id}`);
+        return job;
+    } catch (error) {
+        console.error(`❌ Erro ao adicionar job à fila ${deviceIp}:`, error.message);
         return null;
     }
 }
@@ -249,18 +352,24 @@ async function registerUsersInDevice(deviceIp, userBatch) {
         const username = process.env.DIGEST_USERNAME;
         const password = process.env.DIGEST_PASSWORD;
 
-        // Monta o payload com a lista de usuários
+        // Monta o payload com a lista de usuários (nome e sobrenome separados)
         const payload = {
-            UserList: userBatch.map(user => ({
-                UserID: user.userId,
-                UserName: user.name.substring(0, 50), // Limita nome a 50 caracteres
-                UserType: 0, // 0: General user
-                Authority: 1, // 1: Administrador
-                Doors: [0],
-                TimeSections: [255],
-                ValidFrom: "2024-01-01 00:00:00",
-                ValidTo: "2037-12-31 23:59:59"
-            }))
+            UserList: userBatch.map(user => {
+                const { firstName, lastName } = splitName(user.name);
+                
+                return {
+                    UserID: user.userId,
+                    UserName: `${firstName} ${lastName}`.substring(0, 50), // Nome completo limitado a 50 caracteres
+                    FirstName: firstName.substring(0, 25), // Nome limitado a 25 caracteres
+                    LastName: lastName.substring(0, 25),   // Sobrenome limitado a 25 caracteres
+                    UserType: 0, // 0: General user
+                    Authority: 1, // 1: Administrador
+                    Doors: [0],
+                    TimeSections: [255],
+                    ValidFrom: "2024-01-01 00:00:00",
+                    ValidTo: "2037-12-31 23:59:59"
+                };
+            })
         };
 
         const axiosDigest = new AxiosDigestAuth({
@@ -473,6 +582,163 @@ function chunkArray(array, chunkSize) {
 }
 
 /**
+ * Processa um job individual da fila
+ */
+async function processUserJob(job) {
+    const { deviceIp, user, existingUsers, stats } = job.data;
+    
+    try {
+        console.log(`🔄 Processando job ${job.id} para ${user.name} na leitora ${deviceIp}...`);
+        
+        const existingUserIds = new Set(existingUsers.map(u => u.userId));
+        const existingUserMap = new Map(existingUsers.map(u => [u.userId, u]));
+        
+        // 1. Deletar se usuário já existe
+        if (existingUserIds.has(user.userId)) {
+            const existingUser = existingUserMap.get(user.userId);
+            if (existingUser && existingUser.recNo) {
+                const deleteResult = await deleteUserFromDevice(deviceIp, existingUser.recNo);
+                if (deleteResult.success) {
+                    stats.usersDeleted++;
+                    console.log(`   🗑️  Usuário ${user.name} deletado`);
+                }
+            }
+        }
+        
+        // 2. Cadastrar usuário
+        const userRegResult = await registerUsersInDevice(deviceIp, [user]);
+        if (!userRegResult.success) {
+            throw new Error(`Falha ao cadastrar usuário: ${userRegResult.error}`);
+        }
+        stats.usersRegistered++;
+        
+        // 3. Aguardar um pouco
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // 4. Cadastrar face
+        const faceRegResult = await registerFacesInDevice(deviceIp, [user]);
+        if (!faceRegResult.success) {
+            throw new Error(`Falha ao cadastrar face: ${faceRegResult.error}`);
+        }
+        stats.facesRegistered++;
+        
+        // 5. Salvar no Redis
+        const redisResult = await saveToRedis(deviceIp, user.userId);
+        if (redisResult.success) {
+            stats.redisSaves++;
+        }
+        
+        console.log(`   ✅ Job ${job.id} concluído para ${user.name}`);
+        
+        return { success: true, stats };
+        
+    } catch (error) {
+        console.error(`   ❌ Erro no job ${job.id}:`, error.message);
+        throw error;
+    }
+}
+
+/**
+ * Cria worker para processar jobs de um dispositivo
+ */
+function createWorkerForDevice(deviceIp) {
+    if (!ioredisClient) {
+        console.warn(`⚠️  IORedis não disponível, pulando worker para ${deviceIp}`);
+        return null;
+    }
+    
+    const queueName = `facial-registration-${deviceIp.replace(/\./g, '-')}`;
+    
+    const worker = new Worker(queueName, processUserJob, {
+        connection: ioredisClient,
+        concurrency: 2, // Processar até 2 jobs simultaneamente por dispositivo
+    });
+    
+    worker.on('completed', (job) => {
+        console.log(`✅ Job ${job.id} concluído na fila ${deviceIp}`);
+    });
+    
+    worker.on('failed', (job, err) => {
+        console.error(`❌ Job ${job.id} falhou na fila ${deviceIp}:`, err.message);
+    });
+    
+    worker.on('error', (err) => {
+        console.error(`❌ Erro no worker ${deviceIp}:`, err.message);
+    });
+    
+    console.log(`👷 Worker criado para dispositivo ${deviceIp}`);
+    return worker;
+}
+
+/**
+ * Processo completo para um dispositivo usando filas BullMQ
+ */
+async function processDeviceWithQueue(deviceIp, userBatch, stats) {
+    console.log(`\n🖥️  Processando leitora ${deviceIp} com filas BullMQ...`);
+    
+    // 1. Buscar usuários existentes
+    const existingUsers = await fetchExistingUsersFromDevice(deviceIp);
+    stats.usersVerified += existingUsers.length;
+    
+    // 2. Criar worker para o dispositivo
+    const worker = createWorkerForDevice(deviceIp);
+    if (!worker) {
+        console.warn(`⚠️  Não foi possível criar worker para ${deviceIp}, processando síncrono`);
+        return await processDeviceComplete(deviceIp, userBatch, stats);
+    }
+    
+    // 3. Adicionar jobs à fila
+    const jobs = [];
+    for (const user of userBatch) {
+        const jobData = {
+            deviceIp,
+            user,
+            existingUsers,
+            stats,
+            priority: 0,
+            delay: 0
+        };
+        
+        const job = await addJobToQueue(deviceIp, jobData);
+        if (job) {
+            jobs.push(job);
+        }
+    }
+    
+    console.log(`📝 ${jobs.length} jobs adicionados à fila ${deviceIp}`);
+    
+    // 4. Aguardar conclusão de todos os jobs
+    const results = await Promise.allSettled(
+        jobs.map(job => job.waitUntilFinished())
+    );
+    
+    // 5. Processar resultados
+    let successCount = 0;
+    let errorCount = 0;
+    
+    results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+            successCount++;
+        } else {
+            errorCount++;
+            console.error(`❌ Job ${jobs[index].id} falhou:`, result.reason);
+        }
+    });
+    
+    console.log(`📊 Fila ${deviceIp}: ${successCount} sucessos, ${errorCount} erros`);
+    
+    // 6. Fechar worker
+    await worker.close();
+    
+    return {
+        success: errorCount === 0,
+        stats,
+        successCount,
+        errorCount
+    };
+}
+
+/**
  * Processo completo para um dispositivo: verificar -> deletar -> cadastrar usuário -> cadastrar face -> redis
  */
 async function processDeviceComplete(deviceIp, userBatch, stats) {
@@ -638,11 +904,14 @@ async function registerAllFacesInAllDevices() {
 
         const results = [];
 
-        // Processa cada lote em cada leitora
+        // Inicializa IORedis para BullMQ
+        await initIORedis();
+        
+        // Processa cada lote em cada leitora usando filas BullMQ
         for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
             const batch = batches[batchIndex];
             console.log(`\n═══════════════════════════════════════════`);
-            console.log(`📦 Lote ${batchIndex + 1}/${batches.length} (${batch.length} usuários)`);
+            console.log(`📦 Lote ${batchIndex + 1}/${batches.length} (${batch.length} usuários) - BULLMQ`);
             console.log(`═══════════════════════════════════════════`);
             
             for (const deviceIp of ipArray) {
@@ -654,7 +923,10 @@ async function registerAllFacesInAllDevices() {
                     redisSaves: 0
                 };
 
-                const result = await processDeviceComplete(deviceIp, batch, batchStats);
+                // Usa filas BullMQ se disponível, senão processa síncrono
+                const result = ioredisClient 
+                    ? await processDeviceWithQueue(deviceIp, batch, batchStats)
+                    : await processDeviceComplete(deviceIp, batch, batchStats);
                 
                 // Atualiza estatísticas globais
                 globalStats.usersVerified += batchStats.usersVerified;
@@ -673,7 +945,9 @@ async function registerAllFacesInAllDevices() {
                     deviceIp,
                     batch: batchIndex + 1,
                     success: result.success,
-                    stats: batchStats
+                    stats: batchStats,
+                    successCount: result.successCount || 0,
+                    errorCount: result.errorCount || 0
                 });
 
                 // Pausa entre dispositivos
@@ -683,13 +957,14 @@ async function registerAllFacesInAllDevices() {
 
         // Relatório final
         console.log('\n\n═══════════════════════════════════════════');
-        console.log('📊 RELATÓRIO FINAL COMPLETO');
+        console.log('📊 RELATÓRIO FINAL COMPLETO - BULLMQ v2.1');
         console.log('═══════════════════════════════════════════');
         console.log(`👥 Total de usuários: ${users.length}`);
         console.log(`✅ Imagens processadas: ${processedCount}`);
         console.log(`❌ Erros no processamento: ${errorCount}`);
         console.log(`📡 Leitoras faciais: ${ipArray.length}`);
         console.log(`📦 Lotes processados: ${batches.length}`);
+        console.log(`🔄 Processamento: ${ioredisClient ? 'BullMQ (Assíncrono)' : 'Síncrono'}`);
         console.log(`\n🔍 Operações Realizadas:`);
         console.log(`   👀 Usuários verificados: ${globalStats.usersVerified}`);
         console.log(`   🗑️  Usuários deletados: ${globalStats.usersDeleted}`);
@@ -699,6 +974,17 @@ async function registerAllFacesInAllDevices() {
         console.log(`\n📈 Resultados:`);
         console.log(`   ✅ Lotes bem-sucedidos: ${globalStats.successfulBatches}`);
         console.log(`   ❌ Lotes com erro: ${globalStats.failedBatches}`);
+        
+        // Estatísticas das filas BullMQ
+        if (ioredisClient) {
+            const totalSuccess = results.reduce((sum, r) => sum + (r.successCount || 0), 0);
+            const totalErrors = results.reduce((sum, r) => sum + (r.errorCount || 0), 0);
+            console.log(`\n🔄 Estatísticas BullMQ:`);
+            console.log(`   📝 Jobs processados: ${totalSuccess + totalErrors}`);
+            console.log(`   ✅ Jobs bem-sucedidos: ${totalSuccess}`);
+            console.log(`   ❌ Jobs com erro: ${totalErrors}`);
+        }
+        
         console.log('═══════════════════════════════════════════\n');
 
         // Detalhes por leitora
@@ -717,6 +1003,10 @@ async function registerAllFacesInAllDevices() {
         if (redisClient) {
             await redisClient.quit();
             console.log('\n✅ Conexão Redis encerrada');
+        }
+        if (ioredisClient) {
+            await ioredisClient.quit();
+            console.log('✅ Conexão IORedis encerrada');
         }
 
         return {
