@@ -181,7 +181,7 @@ class FacialRegistrationService {
      */
     showFinalReport(globalStats, results, ipArray) {
         console.log('\n' + '═'.repeat(60));
-        console.log('📊 RELATÓRIO FINAL - REGISTRO FACIAL PARALELO');
+        console.log('📊 RELATÓRIO FINAL - REGISTRO PARALELO');
         console.log('═'.repeat(60));
         
         console.log(`\n🔍 Operações Realizadas:`);

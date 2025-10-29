@@ -2,7 +2,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 
 /**
- * Processador de Dispositivos Individuais
+ * Processador de Dispositivos em Paralelo
  * Executa um processo Node.js separado para cada catraca
  */
 
@@ -13,7 +13,7 @@ class DeviceProcessor {
     }
 
     /**
-     * Processa um dispositivo específico
+     * Processa um dispositivo específico em processo separado
      */
     async processDevice(deviceIp, userBatch, batchIndex) {
         return new Promise((resolve, reject) => {

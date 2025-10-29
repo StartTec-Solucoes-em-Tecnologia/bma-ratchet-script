@@ -85,7 +85,7 @@ class DeviceWorker {
             console.log(`   👤 Cadastrando ${users.length} usuários...`);
             const userRegResult = await this.apiClient.registerUsers(deviceIp, users);
             if (!userRegResult.success) {
-                throw new Error(`Falha ao cadastrar usuários: ${userRegResult.error}`);
+                throw new Error(`Falha ao cadastrar usuários: ${userRegResult.error || 'Erro desconhecido'}`);
             }
             stats.usersRegistered += userRegResult.successCount || users.length;
             console.log(`   ✅ ${userRegResult.successCount || users.length} usuários cadastrados`);
@@ -98,7 +98,7 @@ class DeviceWorker {
             console.log(`   🎭 Cadastrando ${users.length} faces...`);
             const faceRegResult = await this.apiClient.registerFaces(deviceIp, users);
             if (!faceRegResult.success) {
-                throw new Error(`Falha ao cadastrar faces: ${faceRegResult.error}`);
+                throw new Error(`Falha ao cadastrar faces: ${faceRegResult.error || 'Erro desconhecido'}`);
             }
             stats.facesRegistered += faceRegResult.successCount || users.length;
             console.log(`   ✅ ${faceRegResult.successCount || users.length} faces cadastradas`);
