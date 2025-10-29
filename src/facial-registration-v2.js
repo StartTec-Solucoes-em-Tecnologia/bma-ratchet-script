@@ -116,7 +116,8 @@ class FacialRegistrationService {
                             email: user.email,
                             document: user.document,
                             cellphone: user.cellphone,
-                            type: user.type
+                            type: user.type,
+                            inviteId: user.inviteId
                         }, this.cacheManager);
                         
                         if (saveResult.success) {

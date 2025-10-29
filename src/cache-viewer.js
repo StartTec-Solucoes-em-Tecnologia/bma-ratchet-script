@@ -35,6 +35,7 @@ class CacheViewer {
 
         allUsers.forEach((user, index) => {
             console.log(`${index + 1}. ${user.name} (${user.type})`);
+            console.log(`   🎫 InviteId: ${user.inviteId}`);
             console.log(`   📧 Email: ${user.email || 'N/A'}`);
             console.log(`   📄 Documento: ${user.document || 'N/A'}`);
             console.log(`   📱 Telefone: ${user.cellphone || 'N/A'}`);
@@ -82,7 +83,8 @@ class CacheViewer {
         const results = allUsers.filter(user => 
             user.name.toLowerCase().includes(query.toLowerCase()) ||
             user.document?.includes(query) ||
-            user.email?.toLowerCase().includes(query.toLowerCase())
+            user.email?.toLowerCase().includes(query.toLowerCase()) ||
+            user.inviteId?.includes(query)
         );
 
         console.log(`\n🔍 RESULTADOS DA BUSCA: "${query}"`);
@@ -95,6 +97,7 @@ class CacheViewer {
 
         results.forEach((user, index) => {
             console.log(`${index + 1}. ${user.name} (${user.type})`);
+            console.log(`   🎫 InviteId: ${user.inviteId}`);
             console.log(`   📧 ${user.email || 'N/A'} | 📄 ${user.document || 'N/A'}`);
             console.log(`   🖥️  ${user.deviceIp} | 📅 ${new Date(user.registeredAt).toLocaleString()}`);
         });

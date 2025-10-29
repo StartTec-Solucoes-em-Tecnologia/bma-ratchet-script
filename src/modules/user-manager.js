@@ -34,6 +34,7 @@ class UserManager {
 
     /**
      * Busca invites com facial_image do banco de dados
+     * Prioriza guests sobre participants para o mesmo inviteId
      */
     async fetchInvitesWithFacialImages() {
         try {
@@ -73,7 +74,7 @@ class UserManager {
             });
 
             // Converte para formato unificado
-            const users = [
+            const allUsers = [
                 ...participants.map(p => ({
                     userId: p.id,
                     name: p.name,
@@ -82,7 +83,8 @@ class UserManager {
                     cellphone: p.cellphone,
                     facialImageUrl: p.facialImage,
                     type: 'participant',
-                    inviteId: p.inviteId
+                    inviteId: p.inviteId,
+                    priority: 1 // Prioridade menor para participants
                 })),
                 ...guests.map(g => ({
                     userId: g.id,
@@ -92,13 +94,30 @@ class UserManager {
                     cellphone: g.cellphone,
                     facialImageUrl: g.facialImage,
                     type: 'guest',
-                    inviteId: g.inviteId
+                    inviteId: g.inviteId,
+                    priority: 2 // Prioridade maior para guests
                 }))
             ];
 
-            console.log(`📊 Encontrados ${users.length} usuários com facial_image`);
+            // Agrupa por inviteId e seleciona o de maior prioridade (guest)
+            const usersByInvite = new Map();
+            
+            allUsers.forEach(user => {
+                const existingUser = usersByInvite.get(user.inviteId);
+                
+                if (!existingUser || user.priority > existingUser.priority) {
+                    usersByInvite.set(user.inviteId, user);
+                }
+            });
+
+            // Converte de volta para array
+            const users = Array.from(usersByInvite.values());
+
+            console.log(`📊 Encontrados ${users.length} usuários únicos por inviteId`);
             console.log(`   👥 Participantes: ${participants.length}`);
-            console.log(`   👤 Convidados: ${guests.length}\n`);
+            console.log(`   👤 Convidados: ${guests.length}`);
+            console.log(`   🎯 Únicos selecionados: ${users.length}`);
+            console.log(`   📋 Prioridade: Guest > Participant\n`);
 
             return users;
         } catch (error) {
@@ -143,10 +162,11 @@ class UserManager {
             let redisSuccess = false;
             let jsonSuccess = false;
             
-            // Salva no Redis
+            // Salva no Redis (usando inviteId como chave se disponível)
             if (this.redisClient) {
                 const key = `device:${deviceIp}:users`;
-                await this.redisClient.sAdd(key, userId);
+                const value = userData.inviteId ? `${userId}:${userData.inviteId}` : userId;
+                await this.redisClient.sAdd(key, value);
                 redisSuccess = true;
             }
             

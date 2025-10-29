@@ -137,19 +137,21 @@ class CacheManager {
     }
 
     /**
-     * Adiciona usuário ao cache JSON
+     * Adiciona usuário ao cache JSON usando inviteId como chave principal
+     * Sobrescreve dados existentes se inviteId já existir
      */
     async addUser(deviceIp, userId, userData) {
         try {
             if (!this.cache[deviceIp]) {
-                this.cache[deviceIp] = [];
+                this.cache[deviceIp] = {};
             }
             
-            // Verifica se usuário já existe
-            const existingIndex = this.cache[deviceIp].findIndex(u => u.userId === userId);
+            // Usa inviteId como chave principal para sobrescrever dados
+            const inviteId = userData.inviteId;
             
             const userRecord = {
                 userId,
+                inviteId: inviteId,
                 name: userData.name,
                 email: userData.email,
                 document: userData.document,
@@ -159,14 +161,17 @@ class CacheManager {
                 lastUpdated: new Date().toISOString()
             };
             
-            if (existingIndex >= 0) {
-                // Atualiza usuário existente
-                this.cache[deviceIp][existingIndex] = userRecord;
-                console.log(`🔄 Usuário ${userId} atualizado no cache JSON`);
+            // Verifica se inviteId já existe
+            const existingUser = this.cache[deviceIp][inviteId];
+            
+            if (existingUser) {
+                // Sobrescreve dados existentes
+                this.cache[deviceIp][inviteId] = userRecord;
+                console.log(`🔄 Usuário sobrescrito - inviteId: ${inviteId} (userId: ${existingUser.userId} → ${userId})`);
             } else {
                 // Adiciona novo usuário
-                this.cache[deviceIp].push(userRecord);
-                console.log(`➕ Usuário ${userId} adicionado ao cache JSON`);
+                this.cache[deviceIp][inviteId] = userRecord;
+                console.log(`➕ Usuário adicionado - inviteId: ${inviteId} (userId: ${userId})`);
             }
             
             await this.save();
@@ -179,17 +184,17 @@ class CacheManager {
     }
 
     /**
-     * Remove usuário do cache JSON
+     * Remove usuário do cache JSON por inviteId
      */
-    async removeUser(deviceIp, userId) {
+    async removeUser(deviceIp, userId, inviteId = null) {
         try {
-            if (this.cache[deviceIp]) {
-                const initialLength = this.cache[deviceIp].length;
-                this.cache[deviceIp] = this.cache[deviceIp].filter(u => u.userId !== userId);
+            if (this.cache[deviceIp] && inviteId) {
+                const hadUser = this.cache[deviceIp].hasOwnProperty(inviteId);
                 
-                if (this.cache[deviceIp].length < initialLength) {
+                if (hadUser) {
+                    delete this.cache[deviceIp][inviteId];
                     await this.save();
-                    console.log(`➖ Usuário ${userId} removido do cache JSON`);
+                    console.log(`➖ Usuário removido - inviteId: ${inviteId} (userId: ${userId})`);
                     return true;
                 }
             }
@@ -206,7 +211,28 @@ class CacheManager {
      * Obtém usuários registrados de um dispositivo do cache JSON
      */
     getUsers(deviceIp) {
-        return this.cache[deviceIp] || [];
+        const deviceUsers = this.cache[deviceIp] || {};
+        return Object.values(deviceUsers);
+    }
+
+    /**
+     * Busca usuário por inviteId em um dispositivo específico
+     */
+    getUserByInviteId(deviceIp, inviteId) {
+        const deviceUsers = this.cache[deviceIp] || {};
+        return deviceUsers[inviteId] || null;
+    }
+
+    /**
+     * Busca usuário por inviteId em todos os dispositivos
+     */
+    getUserByInviteIdGlobal(inviteId) {
+        for (const [deviceIp, deviceUsers] of Object.entries(this.cache)) {
+            if (deviceUsers[inviteId]) {
+                return { ...deviceUsers[inviteId], deviceIp };
+            }
+        }
+        return null;
     }
 
     /**
@@ -214,8 +240,10 @@ class CacheManager {
      */
     getAllUsers() {
         const allUsers = [];
-        for (const [deviceIp, users] of Object.entries(this.cache)) {
-            allUsers.push(...users.map(user => ({ ...user, deviceIp })));
+        for (const [deviceIp, deviceUsers] of Object.entries(this.cache)) {
+            for (const [inviteId, user] of Object.entries(deviceUsers)) {
+                allUsers.push({ ...user, deviceIp });
+            }
         }
         return allUsers;
     }
@@ -230,9 +258,10 @@ class CacheManager {
             usersByDevice: {}
         };
 
-        for (const [deviceIp, users] of Object.entries(this.cache)) {
-            stats.usersByDevice[deviceIp] = users.length;
-            stats.totalUsers += users.length;
+        for (const [deviceIp, deviceUsers] of Object.entries(this.cache)) {
+            const userCount = Object.keys(deviceUsers).length;
+            stats.usersByDevice[deviceIp] = userCount;
+            stats.totalUsers += userCount;
         }
 
         return stats;
@@ -251,8 +280,8 @@ class CacheManager {
             let syncedDevices = 0;
             let syncedUsers = 0;
             
-            for (const [deviceIp, users] of Object.entries(this.cache)) {
-                const userIds = users.map(u => u.userId);
+            for (const [deviceIp, deviceUsers] of Object.entries(this.cache)) {
+                const userIds = Object.values(deviceUsers).map(u => u.userId);
                 const redisKey = `device:${deviceIp}:users`;
                 
                 // Limpa chave existente
