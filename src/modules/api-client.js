@@ -78,17 +78,25 @@ class ApiClient {
             const url = `http://${deviceIp}/cgi-bin/AccessUser.cgi?action=insertMulti`;
             const axiosDigest = this.createDigestAuth();
 
-            const payload = {
-                UserList: userBatch.map(user => ({
-                    UserID: user.userId,
-                    UserName: user.formattedName || user.name.substring(0, 50),
+            // Valida dados antes de enviar
+            const validatedUsers = userBatch.map(user => {
+                const userName = user.formattedName || user.name || 'Usuario';
+                const cleanUserName = userName.substring(0, 50).replace(/[^\w\s]/g, ''); // Remove caracteres especiais
+                
+                return {
+                    UserID: String(user.userId || '0'),
+                    UserName: cleanUserName || 'Usuario',
                     UserType: 0,
                     Authority: 1,
                     Doors: [0],
                     TimeSections: [255],
                     ValidFrom: "2024-01-01 00:00:00",
                     ValidTo: "2037-12-31 23:59:59"
-                }))
+                };
+            });
+
+            const payload = {
+                UserList: validatedUsers
             };
 
             console.log(`   📤 Enviando ${userBatch.length} usuários para ${deviceIp}...`);
@@ -116,8 +124,30 @@ class ApiClient {
 
             return { success: isSuccess, response: responseText };
         } catch (error) {
-            console.error(`❌ Erro ao cadastrar usuários em ${deviceIp}:`, error.message);
-            return { success: false, error: error.message };
+            let errorDetails = error.message;
+            
+            if (error.response) {
+                // Erro HTTP com resposta
+                const status = error.response.status;
+                const statusText = error.response.statusText;
+                const responseData = error.response.data;
+                
+                console.error(`❌ Erro HTTP ${status} (${statusText}) ao cadastrar usuários em ${deviceIp}`);
+                console.error(`   📄 Resposta: ${JSON.stringify(responseData)}`);
+                console.error(`   📤 Payload enviado: ${JSON.stringify(payload, null, 2)}`);
+                
+                errorDetails = `HTTP ${status}: ${statusText} - ${JSON.stringify(responseData)}`;
+            } else if (error.request) {
+                // Erro de rede
+                console.error(`❌ Erro de rede ao cadastrar usuários em ${deviceIp}:`, error.message);
+                errorDetails = `Erro de rede: ${error.message}`;
+            } else {
+                // Outros erros
+                console.error(`❌ Erro ao cadastrar usuários em ${deviceIp}:`, error.message);
+                errorDetails = error.message;
+            }
+            
+            return { success: false, error: errorDetails };
         }
     }
 
@@ -129,11 +159,26 @@ class ApiClient {
             const url = `http://${deviceIp}/cgi-bin/AccessFace.cgi?action=insertMulti`;
             const axiosDigest = this.createDigestAuth();
 
-            const payload = {
-                FaceList: userBatch.map(user => ({
-                    UserID: user.userId,
+            // Valida dados antes de enviar
+            const validatedFaces = userBatch.map(user => {
+                if (!user.photoBase64) {
+                    console.warn(`⚠️  Usuário ${user.userId} sem dados de foto`);
+                    return null;
+                }
+                
+                return {
+                    UserID: String(user.userId || '0'),
                     PhotoData: [user.photoBase64]
-                }))
+                };
+            }).filter(face => face !== null);
+
+            if (validatedFaces.length === 0) {
+                console.warn(`⚠️  Nenhuma face válida para cadastrar em ${deviceIp}`);
+                return { success: false, error: 'Nenhuma face válida' };
+            }
+
+            const payload = {
+                FaceList: validatedFaces
             };
 
             console.log(`   🎭 Enviando ${userBatch.length} faces para ${deviceIp}...`);
@@ -160,15 +205,37 @@ class ApiClient {
 
             return { success: isSuccess, response: responseText };
         } catch (error) {
-            console.error(`❌ Erro ao cadastrar faces em ${deviceIp}:`, error.message);
-            return { success: false, error: error.message };
+            let errorDetails = error.message;
+            
+            if (error.response) {
+                // Erro HTTP com resposta
+                const status = error.response.status;
+                const statusText = error.response.statusText;
+                const responseData = error.response.data;
+                
+                console.error(`❌ Erro HTTP ${status} (${statusText}) ao cadastrar faces em ${deviceIp}`);
+                console.error(`   📄 Resposta: ${JSON.stringify(responseData)}`);
+                console.error(`   📤 Payload enviado: ${JSON.stringify(payload, null, 2)}`);
+                
+                errorDetails = `HTTP ${status}: ${statusText} - ${JSON.stringify(responseData)}`;
+            } else if (error.request) {
+                // Erro de rede
+                console.error(`❌ Erro de rede ao cadastrar faces em ${deviceIp}:`, error.message);
+                errorDetails = `Erro de rede: ${error.message}`;
+            } else {
+                // Outros erros
+                console.error(`❌ Erro ao cadastrar faces em ${deviceIp}:`, error.message);
+                errorDetails = error.message;
+            }
+            
+            return { success: false, error: errorDetails };
         }
     }
 
     /**
      * Processa lote completo: verificar -> deletar -> cadastrar usuário -> cadastrar face
      */
-    async processBatch(deviceIp, userBatch, stats) {
+    async processBatch(deviceIp, userBatch, stats, retryCount = 0) {
         try {
             console.log(`\n🖥️  Processando leitora ${deviceIp}...`);
             
@@ -201,9 +268,16 @@ class ApiClient {
             console.log(`   👤 Cadastrando ${userBatch.length} usuários...`);
             const userRegResult = await this.registerUsers(deviceIp, userBatch);
             if (!userRegResult.success) {
+                // Retry se for erro 400 e ainda temos tentativas
+                if (userRegResult.error.includes('HTTP 400') && retryCount < 2) {
+                    console.log(`   🔄 Tentativa ${retryCount + 1} falhou, tentando novamente em 5s...`);
+                    await new Promise(resolve => setTimeout(resolve, 5000));
+                    return this.processBatch(deviceIp, userBatch, stats, retryCount + 1);
+                }
+                
                 return {
                     success: false,
-                    error: 'Falha ao cadastrar usuários',
+                    error: `Falha ao cadastrar usuários: ${userRegResult.error}`,
                     stats
                 };
             }
@@ -218,9 +292,16 @@ class ApiClient {
             console.log(`   🎭 Cadastrando ${userBatch.length} faces...`);
             const faceRegResult = await this.registerFaces(deviceIp, userBatch);
             if (!faceRegResult.success) {
+                // Retry se for erro 400 e ainda temos tentativas
+                if (faceRegResult.error.includes('HTTP 400') && retryCount < 2) {
+                    console.log(`   🔄 Tentativa ${retryCount + 1} falhou, tentando novamente em 5s...`);
+                    await new Promise(resolve => setTimeout(resolve, 5000));
+                    return this.processBatch(deviceIp, userBatch, stats, retryCount + 1);
+                }
+                
                 return {
                     success: false,
-                    error: 'Falha ao cadastrar faces',
+                    error: `Falha ao cadastrar faces: ${faceRegResult.error}`,
                     stats
                 };
             }
