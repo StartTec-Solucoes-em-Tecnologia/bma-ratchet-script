@@ -51,7 +51,7 @@ class UserManager {
                             event_id: eventId
                         }
                     },
-                    facialImage: {
+                    facial_image: {
                         not: null
                     }
                 },
@@ -68,7 +68,7 @@ class UserManager {
                             event_id: eventId
                         }
                     },
-                    facialImage: {
+                    facial_image: {
                         not: null
                     }
                 },
@@ -85,9 +85,9 @@ class UserManager {
                     email: p.email,
                     document: p.document,
                     cellphone: p.cellphone,
-                    facialImageUrl: p.facialImage,
+                    facialImageUrl: p.facial_image,
                     type: 'participant',
-                    inviteId: p.inviteId,
+                    inviteId: p.invite[0]?.id, // Pega o primeiro invite
                     priority: 1 // Prioridade menor para participants
                 })),
                 ...guests.map(g => ({
@@ -96,9 +96,9 @@ class UserManager {
                     email: g.email,
                     document: g.document,
                     cellphone: g.cellphone,
-                    facialImageUrl: g.facialImage,
+                    facialImageUrl: g.facial_image,
                     type: 'guest',
-                    inviteId: g.inviteId,
+                    inviteId: g.invite[0]?.id, // Pega o primeiro invite
                     priority: 2 // Prioridade maior para guests
                 }))
             ];
