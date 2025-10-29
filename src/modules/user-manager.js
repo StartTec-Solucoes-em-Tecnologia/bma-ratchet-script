@@ -47,7 +47,9 @@ class UserManager {
             const participants = await this.prisma.participant.findMany({
                 where: {
                     invite: {
-                        event_id: eventId
+                        some: {
+                            event_id: eventId
+                        }
                     },
                     facialImage: {
                         not: null
@@ -62,7 +64,9 @@ class UserManager {
             const guests = await this.prisma.guest.findMany({
                 where: {
                     invite: {
-                        event_id: eventId
+                        some: {
+                            event_id: eventId
+                        }
                     },
                     facialImage: {
                         not: null
