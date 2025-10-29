@@ -29,7 +29,6 @@ class FacialRegistrationService {
         // Inicializa componentes
         await this.userManager.initRedis();
         await this.cacheManager.init();
-        await this.cacheManager.load();
         await this.imageCacheManager.init();
         
         // Sincroniza cache JSON com Redis
