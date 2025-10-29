@@ -221,6 +221,19 @@ class ApiClient {
     }
 
     /**
+     * Decodifica código de erro do dispositivo
+     */
+    decodeErrorCode(failCode) {
+        const errorCodes = {
+            286064926: 'Usuário não encontrado no dispositivo (cadastre o usuário primeiro)',
+            286064928: 'Dados inválidos ou formato incorreto',
+            286064927: 'Foto inválida ou formato não suportado',
+            268632336: 'Erro geral de processamento em lote'
+        };
+        return errorCodes[failCode] || `Código de erro desconhecido: ${failCode}`;
+    }
+
+    /**
      * Cadastra uma única face na leitora usando API V2 (individual)
      */
     async registerSingleFace(deviceIp, user) {
@@ -279,7 +292,16 @@ class ApiClient {
                 const status = error.response.status;
                 const statusText = error.response.statusText;
                 const responseData = error.response.data;
-                errorDetails = `HTTP ${status}: ${statusText} - ${JSON.stringify(responseData)}`;
+                
+                // Decodifica erro se disponível
+                if (responseData && responseData.detail && responseData.detail.FailCodes) {
+                    const failCode = responseData.detail.FailCodes[0];
+                    const decodedError = this.decodeErrorCode(failCode);
+                    console.error(`     ❌ Erro decodificado: ${decodedError}`);
+                    errorDetails = `HTTP ${status}: ${decodedError} - ${JSON.stringify(responseData)}`;
+                } else {
+                    errorDetails = `HTTP ${status}: ${statusText} - ${JSON.stringify(responseData)}`;
+                }
             }
             
             console.error(`❌ Erro ao cadastrar face do usuário ${user.userId} em ${deviceIp}:`, errorDetails);

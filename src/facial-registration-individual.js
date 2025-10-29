@@ -143,10 +143,22 @@ class IndividualFacialRegistration {
                             console.log(`   ✅ Usuário cadastrado - ${userRegResult.response}`);
                             
                             // 3. Aguardar estabilização
-                            console.log(`   ⏳ Aguardando estabilização (2s)...`);
-                            await new Promise(resolve => setTimeout(resolve, 2000));
+                            console.log(`   ⏳ Aguardando estabilização (5s)...`);
+                            await new Promise(resolve => setTimeout(resolve, 5000));
                             
-                            // 4. Cadastrar face individualmente
+                            // 4. Verificar se usuário foi realmente cadastrado
+                            console.log(`   🔍 Verificando usuário no dispositivo...`);
+                            const verifyUsers = await this.apiClient.fetchExistingUsers(deviceIp);
+                            const userExists = verifyUsers.find(u => u.userId === user.userId);
+                            
+                            if (!userExists) {
+                                console.warn(`   ⚠️  Usuário ${user.userId} não encontrado após cadastro`);
+                                globalStats.failedUsers++;
+                                continue;
+                            }
+                            console.log(`   ✅ Usuário verificado no dispositivo`);
+                            
+                            // 5. Cadastrar face individualmente
                             console.log(`   🎭 Cadastrando face...`);
                             const faceRegResult = await this.apiClient.registerSingleFace(deviceIp, user);
                             
@@ -157,7 +169,7 @@ class IndividualFacialRegistration {
                                 console.log(`   ❌ Falha ao cadastrar face: ${faceRegResult.error}`);
                             }
                             
-                            // 5. Salvar no cache
+                            // 6. Salvar no cache
                             const saveResult = await this.userManager.saveUser(deviceIp, user.userId, {
                                 name: user.name,
                                 email: user.email,

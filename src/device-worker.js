@@ -90,18 +90,36 @@ class DeviceWorker {
             stats.usersRegistered += userRegResult.successCount || users.length;
             console.log(`   ✅ ${userRegResult.successCount || users.length} usuários cadastrados`);
 
-            // 4. Aguardar estabilização
-            console.log(`   ⏳ Aguardando estabilização (3s)...`);
-            await new Promise(resolve => setTimeout(resolve, 3000));
-
-            // 5. Cadastrar faces individualmente
-            console.log(`   🎭 Cadastrando ${users.length} faces...`);
-            const faceRegResult = await this.apiClient.registerFaces(deviceIp, users);
-            if (!faceRegResult.success) {
-                throw new Error(`Falha ao cadastrar faces: ${faceRegResult.error || 'Erro desconhecido'}`);
+            // 4. Aguardar estabilização e verificar usuários cadastrados
+            console.log(`   ⏳ Aguardando estabilização (5s)...`);
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            
+            console.log(`   🔍 Verificando se usuários foram realmente cadastrados...`);
+            const verifyUsers = await this.apiClient.fetchExistingUsers(deviceIp);
+            const verifyUserIds = new Set(verifyUsers.map(u => u.userId));
+            const usersNotFound = users.filter(u => !verifyUserIds.has(u.userId));
+            
+            if (usersNotFound.length > 0) {
+                console.warn(`   ⚠️  ${usersNotFound.length} usuários não encontrados após cadastro:`);
+                usersNotFound.forEach(u => console.warn(`     - ${u.userId} (${u.formattedName || u.name})`));
+            } else {
+                console.log(`   ✅ Todos os ${users.length} usuários verificados no dispositivo`);
             }
-            stats.facesRegistered += faceRegResult.successCount || users.length;
-            console.log(`   ✅ ${faceRegResult.successCount || users.length} faces cadastradas`);
+
+            // 5. Cadastrar faces apenas para usuários verificados
+            const usersToRegisterFace = users.filter(u => verifyUserIds.has(u.userId));
+            
+            if (usersToRegisterFace.length === 0) {
+                console.warn(`   ⚠️  Nenhum usuário encontrado para cadastro de face`);
+            } else {
+                console.log(`   🎭 Cadastrando ${usersToRegisterFace.length} faces...`);
+                const faceRegResult = await this.apiClient.registerFaces(deviceIp, usersToRegisterFace);
+                if (!faceRegResult.success) {
+                    console.warn(`   ⚠️  Algumas faces falharam no cadastro`);
+                }
+                stats.facesRegistered += faceRegResult.successCount || 0;
+                console.log(`   ✅ ${faceRegResult.successCount || 0} faces cadastradas`);
+            }
 
             // 6. Salvar no cache
             console.log(`   💾 Salvando no cache...`);
