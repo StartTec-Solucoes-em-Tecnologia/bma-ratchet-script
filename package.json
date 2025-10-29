@@ -3,20 +3,15 @@
   "version": "1.0.0",
   "main": "src/index.js",
   "scripts": {
-    "register-faces": "node src/facial-registration.js",
+    "register-faces-v2": "node src/facial-registration-v2.js",
     "checkin-server": "node src/checkin-server.js",
-    "worker": "node src/worker.js",
-    "scheduler": "node src/scheduler.js",
-    "test:faces": "node test/test-facial-registration.js",
-    "dev:worker": "nodemon src/worker.js",
-    "dev:scheduler": "nodemon src/scheduler.js",
-    "pm2:start": "pm2 start ecosystem.config.js",
-    "pm2:stop": "pm2 stop all",
-    "pm2:restart": "pm2 restart all",
-    "pm2:logs": "pm2 logs",
-    "docker:up": "docker-compose up -d",
-    "docker:down": "docker-compose down",
-    "docker:logs": "docker-compose logs -f"
+    "cache:list": "node src/cache-viewer.js list",
+    "cache:device": "node src/cache-viewer.js device",
+    "cache:search": "node src/cache-viewer.js search",
+    "cache:stats": "node src/cache-viewer.js stats",
+    "cache:clear": "node src/cache-viewer.js clear",
+    "cache:export": "node src/cache-viewer.js export",
+    "test:faces": "node test/test-facial-registration.js"
   },
   "dependencies": {
     "@mhoc/axios-digest-auth": "^0.8.0",
