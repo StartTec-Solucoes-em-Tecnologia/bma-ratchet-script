@@ -79,13 +79,22 @@ class ApiClient {
             const axiosDigest = this.createDigestAuth();
 
             // Valida dados antes de enviar
-            const validatedUsers = userBatch.map(user => {
+            const validatedUsers = userBatch.map((user, index) => {
                 const userName = user.formattedName || user.name || 'Usuario';
-                const cleanUserName = userName.substring(0, 50).replace(/[^\w\s]/g, ''); // Remove caracteres especiais
+                const cleanUserName = userName.substring(0, 50).replace(/[^\w\s]/g, '').trim(); // Remove caracteres especiais
+                
+                // Validações específicas
+                if (!user.userId || user.userId === '0') {
+                    console.warn(`⚠️  Usuário ${index + 1} tem UserID inválido: ${user.userId}`);
+                }
+                
+                if (!cleanUserName || cleanUserName.length === 0) {
+                    console.warn(`⚠️  Usuário ${index + 1} tem nome inválido: "${userName}"`);
+                }
                 
                 return {
-                    UserID: String(user.userId || '0'),
-                    UserName: cleanUserName || 'Usuario',
+                    UserID: String(user.userId || (Date.now() + index)), // Gera ID único se inválido
+                    UserName: cleanUserName || `Usuario${index + 1}`,
                     UserType: 0,
                     Authority: 1,
                     Doors: [0],
@@ -101,6 +110,7 @@ class ApiClient {
 
             console.log(`   📤 Enviando ${userBatch.length} usuários para ${deviceIp}...`);
             console.log(`   📝 Nomes: ${userBatch.map(u => u.formattedName || u.name).join(', ')}`);
+            console.log(`   🔍 Dados validados:`, JSON.stringify(validatedUsers, null, 2));
 
             const response = await axiosDigest.request({
                 method: 'POST',
@@ -134,7 +144,13 @@ class ApiClient {
                 
                 console.error(`❌ Erro HTTP ${status} (${statusText}) ao cadastrar usuários em ${deviceIp}`);
                 console.error(`   📄 Resposta: ${JSON.stringify(responseData)}`);
-                console.error(`   📤 Payload enviado: ${JSON.stringify(payload, null, 2)}`);
+                
+                // Tenta mostrar payload se estiver disponível
+                try {
+                    console.error(`   📤 Payload enviado: ${JSON.stringify(payload, null, 2)}`);
+                } catch (e) {
+                    console.error(`   📤 Payload: [não disponível]`);
+                }
                 
                 errorDetails = `HTTP ${status}: ${statusText} - ${JSON.stringify(responseData)}`;
             } else if (error.request) {
@@ -215,7 +231,13 @@ class ApiClient {
                 
                 console.error(`❌ Erro HTTP ${status} (${statusText}) ao cadastrar faces em ${deviceIp}`);
                 console.error(`   📄 Resposta: ${JSON.stringify(responseData)}`);
-                console.error(`   📤 Payload enviado: ${JSON.stringify(payload, null, 2)}`);
+                
+                // Tenta mostrar payload se estiver disponível
+                try {
+                    console.error(`   📤 Payload enviado: ${JSON.stringify(payload, null, 2)}`);
+                } catch (e) {
+                    console.error(`   📤 Payload: [não disponível]`);
+                }
                 
                 errorDetails = `HTTP ${status}: ${statusText} - ${JSON.stringify(responseData)}`;
             } else if (error.request) {
