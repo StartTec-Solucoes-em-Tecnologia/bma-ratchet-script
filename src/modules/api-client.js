@@ -87,7 +87,7 @@ class ApiClient {
                 UserID: userId,
                 UserName: cleanUserName,
                 UserType: 0, // General user
-                Authority: 1, // Administrador
+                Authority: 2, // Usuário normal (não administrador)
                 Password: "123456",
                 Doors: [0],
                 TimeSections: [255],
