@@ -11,6 +11,11 @@
     "cache:stats": "node src/cache-viewer.js stats",
     "cache:clear": "node src/cache-viewer.js clear",
     "cache:export": "node src/cache-viewer.js export",
+    "images:list": "node src/image-cache-viewer.js list",
+    "images:stats": "node src/image-cache-viewer.js stats",
+    "images:cleanup": "node src/image-cache-viewer.js cleanup",
+    "images:clear": "node src/image-cache-viewer.js clear",
+    "images:check": "node src/image-cache-viewer.js check",
     "test:faces": "node test/test-facial-registration.js"
   },
   "dependencies": {

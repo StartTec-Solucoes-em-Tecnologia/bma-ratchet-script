@@ -131,7 +131,7 @@ class UserManager {
     }
 
     /**
-     * Separa nome completo em nome e sobrenome
+     * Separa nome completo em primeiro nome e último sobrenome
      */
     splitName(fullName) {
         if (!fullName || typeof fullName !== 'string') {
@@ -144,18 +144,24 @@ class UserManager {
             return { firstName: nameParts[0], lastName: 'Sem Sobrenome' };
         }
         
+        // Pega apenas o primeiro nome e último sobrenome
         const firstName = nameParts[0];
-        const lastName = nameParts.slice(1).join(' ');
+        const lastName = nameParts[nameParts.length - 1]; // Último elemento
         
         return { firstName, lastName };
     }
 
     /**
-     * Formata nome para envio à catraca (nome completo limpo)
+     * Formata nome para envio à catraca (apenas primeiro nome e último sobrenome)
      */
     formatNameForDevice(fullName) {
         const { firstName, lastName } = this.splitName(fullName);
-        return `${firstName} ${lastName}`.trim();
+        const formattedName = `${firstName} ${lastName}`.trim();
+        
+        // Limita a 50 caracteres conforme especificação da API
+        return formattedName.length > 50 
+            ? formattedName.substring(0, 50) 
+            : formattedName;
     }
 
     /**

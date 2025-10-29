@@ -2,18 +2,18 @@ const fs = require('fs').promises;
 const path = require('path');
 
 /**
- * Gerenciador de Cache JSON para usuários registrados
+ * Gerenciador de Cache JSON para usuários registrados por IP de leitora facial
  * Responsável por salvar, carregar e gerenciar backups do cache
  */
 
 // Configuração de cache JSON
 const CACHE_DIR = path.join(__dirname, '..', '..', 'cache');
-const CACHE_FILE = path.join(CACHE_DIR, 'registered-users.json');
 const BACKUP_DIR = path.join(CACHE_DIR, 'backups');
 
 class CacheManager {
     constructor() {
         this.cache = {};
+        this.deviceFiles = new Map(); // Mapeia IP -> arquivo de cache
     }
 
     /**
@@ -24,104 +24,143 @@ class CacheManager {
             await fs.mkdir(CACHE_DIR, { recursive: true });
             await fs.mkdir(BACKUP_DIR, { recursive: true });
             console.log('📁 Diretórios de cache inicializados');
+            await this.loadAllDevices();
         } catch (error) {
             console.warn('⚠️  Erro ao criar diretórios de cache:', error.message);
         }
     }
 
     /**
-     * Carrega cache de usuários registrados do JSON
+     * Carrega todos os arquivos de cache de dispositivos
      */
-    async load() {
+    async loadAllDevices() {
         try {
-            const data = await fs.readFile(CACHE_FILE, 'utf8');
-            this.cache = JSON.parse(data);
+            const files = await fs.readdir(CACHE_DIR);
+            const deviceFiles = files.filter(file => file.startsWith('device-') && file.endsWith('.json'));
+            
+            for (const file of deviceFiles) {
+                const deviceIp = file.replace('device-', '').replace('.json', '');
+                const filePath = path.join(CACHE_DIR, file);
+                
+                try {
+                    const data = await fs.readFile(filePath, 'utf8');
+                    this.cache[deviceIp] = JSON.parse(data);
+                    this.deviceFiles.set(deviceIp, filePath);
+                } catch (error) {
+                    console.warn(`⚠️  Erro ao carregar cache do dispositivo ${deviceIp}:`, error.message);
+                    this.cache[deviceIp] = {};
+                }
+            }
+            
             console.log(`📄 Cache carregado: ${Object.keys(this.cache).length} dispositivos`);
             return this.cache;
         } catch (error) {
-            if (error.code === 'ENOENT') {
-                console.log('📄 Cache não encontrado, criando novo');
-                this.cache = {};
-                return this.cache;
-            }
-            console.warn('⚠️  Erro ao carregar cache:', error.message);
+            console.warn('⚠️  Erro ao carregar caches de dispositivos:', error.message);
             this.cache = {};
             return this.cache;
         }
     }
 
     /**
-     * Salva cache de usuários registrados no JSON
+     * Carrega cache de um dispositivo específico
      */
-    async save() {
+    async loadDevice(deviceIp) {
         try {
-            // Cria backup antes de salvar
-            await this.createBackup();
-            
-            // Salva cache atual
-            await fs.writeFile(CACHE_FILE, JSON.stringify(this.cache, null, 2), 'utf8');
-            console.log('💾 Cache salvo em JSON');
+            const filePath = this.getDeviceFilePath(deviceIp);
+            const data = await fs.readFile(filePath, 'utf8');
+            this.cache[deviceIp] = JSON.parse(data);
+            return this.cache[deviceIp];
         } catch (error) {
-            console.error('❌ Erro ao salvar cache:', error.message);
+            if (error.code === 'ENOENT') {
+                console.log(`📄 Cache do dispositivo ${deviceIp} não encontrado, criando novo`);
+                this.cache[deviceIp] = {};
+                return this.cache[deviceIp];
+            }
+            console.warn(`⚠️  Erro ao carregar cache do dispositivo ${deviceIp}:`, error.message);
+            this.cache[deviceIp] = {};
+            return this.cache[deviceIp];
         }
     }
 
     /**
-     * Cria backup do cache com timestamp
+     * Salva cache de um dispositivo específico
      */
-    async createBackup() {
+    async saveDevice(deviceIp) {
+        try {
+            if (!this.cache[deviceIp]) {
+                console.warn(`⚠️  Nenhum cache encontrado para o dispositivo ${deviceIp}`);
+                return;
+            }
+
+            const filePath = this.getDeviceFilePath(deviceIp);
+            
+            // Cria backup antes de salvar
+            await this.createDeviceBackup(deviceIp, filePath);
+            
+            // Salva cache atual
+            await fs.writeFile(filePath, JSON.stringify(this.cache[deviceIp], null, 2), 'utf8');
+            this.deviceFiles.set(deviceIp, filePath);
+            console.log(`💾 Cache do dispositivo ${deviceIp} salvo`);
+        } catch (error) {
+            console.error(`❌ Erro ao salvar cache do dispositivo ${deviceIp}:`, error.message);
+        }
+    }
+
+    /**
+     * Obtém caminho do arquivo de cache para um dispositivo
+     */
+    getDeviceFilePath(deviceIp) {
+        return path.join(CACHE_DIR, `device-${deviceIp}.json`);
+    }
+
+    /**
+     * Cria backup do cache de um dispositivo
+     */
+    async createDeviceBackup(deviceIp, filePath) {
         try {
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const backupFile = path.join(BACKUP_DIR, `registered-users-${timestamp}.json`);
+            const backupFile = path.join(BACKUP_DIR, `device-${deviceIp}-${timestamp}.json`);
             
-            // Copia arquivo atual para backup
             try {
-                await fs.copyFile(CACHE_FILE, backupFile);
+                await fs.copyFile(filePath, backupFile);
                 console.log(`📦 Backup criado: ${path.basename(backupFile)}`);
             } catch (error) {
-                // Arquivo não existe ainda, não é erro
                 if (error.code !== 'ENOENT') {
                     throw error;
                 }
             }
             
-            // Remove backups antigos (mantém apenas os últimos 10)
-            await this.cleanupOldBackups();
-            
+            await this.cleanupOldDeviceBackups(deviceIp);
         } catch (error) {
-            console.warn('⚠️  Erro ao criar backup:', error.message);
+            console.warn(`⚠️  Erro ao criar backup do dispositivo ${deviceIp}:`, error.message);
         }
     }
 
     /**
-     * Remove backups antigos, mantendo apenas os últimos 10
+     * Limpa backups antigos de um dispositivo
      */
-    async cleanupOldBackups() {
+    async cleanupOldDeviceBackups(deviceIp) {
         try {
             const files = await fs.readdir(BACKUP_DIR);
-            const backupFiles = files
-                .filter(file => file.startsWith('registered-users-') && file.endsWith('.json'))
+            const deviceBackups = files
+                .filter(file => file.startsWith(`device-${deviceIp}-`) && file.endsWith('.json'))
                 .map(file => ({
                     name: file,
                     path: path.join(BACKUP_DIR, file),
                     stats: null
                 }));
             
-            // Obtém estatísticas dos arquivos
-            for (const file of backupFiles) {
+            for (const file of deviceBackups) {
                 try {
                     file.stats = await fs.stat(file.path);
                 } catch (error) {
-                    // Arquivo pode ter sido removido
                     continue;
                 }
             }
             
-            // Ordena por data de modificação (mais recente primeiro)
-            backupFiles.sort((a, b) => b.stats.mtime - a.stats.mtime);
+            deviceBackups.sort((a, b) => b.stats.mtime - a.stats.mtime);
             
-            // Remove arquivos antigos (mantém apenas os últimos 10)
-            const filesToRemove = backupFiles.slice(10);
+            const filesToRemove = deviceBackups.slice(10); // Mantém apenas os 10 mais recentes
             for (const file of filesToRemove) {
                 try {
                     await fs.unlink(file.path);
@@ -130,15 +169,13 @@ class CacheManager {
                     console.warn(`⚠️  Erro ao remover backup ${file.name}:`, error.message);
                 }
             }
-            
         } catch (error) {
-            console.warn('⚠️  Erro ao limpar backups antigos:', error.message);
+            console.warn(`⚠️  Erro ao limpar backups antigos do dispositivo ${deviceIp}:`, error.message);
         }
     }
 
     /**
-     * Adiciona usuário ao cache JSON usando inviteId como chave principal
-     * Sobrescreve dados existentes se inviteId já existir
+     * Adiciona usuário ao cache de um dispositivo
      */
     async addUser(deviceIp, userId, userData) {
         try {
@@ -146,7 +183,6 @@ class CacheManager {
                 this.cache[deviceIp] = {};
             }
             
-            // Usa inviteId como chave principal para sobrescrever dados
             const inviteId = userData.inviteId;
             
             const userRecord = {
@@ -155,36 +191,33 @@ class CacheManager {
                 name: userData.name,
                 email: userData.email,
                 document: userData.document,
-                cellphone: userData.cellphone,
+                cellphone: userData.cellPhone,
                 type: userData.type,
                 registeredAt: new Date().toISOString(),
                 lastUpdated: new Date().toISOString()
             };
             
-            // Verifica se inviteId já existe
             const existingUser = this.cache[deviceIp][inviteId];
             
             if (existingUser) {
-                // Sobrescreve dados existentes
                 this.cache[deviceIp][inviteId] = userRecord;
                 console.log(`🔄 Usuário sobrescrito - inviteId: ${inviteId} (userId: ${existingUser.userId} → ${userId})`);
             } else {
-                // Adiciona novo usuário
                 this.cache[deviceIp][inviteId] = userRecord;
                 console.log(`➕ Usuário adicionado - inviteId: ${inviteId} (userId: ${userId})`);
             }
             
-            await this.save();
+            await this.saveDevice(deviceIp);
             return true;
             
         } catch (error) {
-            console.error('❌ Erro ao adicionar usuário ao cache JSON:', error.message);
+            console.error(`❌ Erro ao adicionar usuário ao cache do dispositivo ${deviceIp}:`, error.message);
             return false;
         }
     }
 
     /**
-     * Remove usuário do cache JSON por inviteId
+     * Remove usuário do cache de um dispositivo
      */
     async removeUser(deviceIp, userId, inviteId = null) {
         try {
@@ -193,7 +226,7 @@ class CacheManager {
                 
                 if (hadUser) {
                     delete this.cache[deviceIp][inviteId];
-                    await this.save();
+                    await this.saveDevice(deviceIp);
                     console.log(`➖ Usuário removido - inviteId: ${inviteId} (userId: ${userId})`);
                     return true;
                 }
@@ -202,13 +235,13 @@ class CacheManager {
             return false;
             
         } catch (error) {
-            console.error('❌ Erro ao remover usuário do cache JSON:', error.message);
+            console.error(`❌ Erro ao remover usuário do cache do dispositivo ${deviceIp}:`, error.message);
             return false;
         }
     }
 
     /**
-     * Obtém usuários registrados de um dispositivo do cache JSON
+     * Obtém usuários de um dispositivo
      */
     getUsers(deviceIp) {
         const deviceUsers = this.cache[deviceIp] || {};
@@ -216,7 +249,7 @@ class CacheManager {
     }
 
     /**
-     * Busca usuário por inviteId em um dispositivo específico
+     * Obtém usuário por inviteId em um dispositivo
      */
     getUserByInviteId(deviceIp, inviteId) {
         const deviceUsers = this.cache[deviceIp] || {};
@@ -224,7 +257,7 @@ class CacheManager {
     }
 
     /**
-     * Busca usuário por inviteId em todos os dispositivos
+     * Obtém usuário por inviteId em qualquer dispositivo
      */
     getUserByInviteIdGlobal(inviteId) {
         for (const [deviceIp, deviceUsers] of Object.entries(this.cache)) {
@@ -268,7 +301,7 @@ class CacheManager {
     }
 
     /**
-     * Sincroniza cache JSON com Redis
+     * Sincroniza cache com Redis
      */
     async syncWithRedis(redisClient) {
         try {
@@ -284,10 +317,8 @@ class CacheManager {
                 const userIds = Object.values(deviceUsers).map(u => u.userId);
                 const redisKey = `device:${deviceIp}:users`;
                 
-                // Limpa chave existente
                 await redisClient.del(redisKey);
                 
-                // Adiciona usuários ao Redis
                 if (userIds.length > 0) {
                     await redisClient.sAdd(redisKey, userIds);
                     syncedDevices++;
@@ -299,6 +330,38 @@ class CacheManager {
             
         } catch (error) {
             console.error('❌ Erro ao sincronizar cache com Redis:', error.message);
+        }
+    }
+
+    /**
+     * Limpa cache de um dispositivo específico
+     */
+    async clearDevice(deviceIp) {
+        try {
+            if (this.cache[deviceIp]) {
+                this.cache[deviceIp] = {};
+                await this.saveDevice(deviceIp);
+                console.log(`🗑️  Cache do dispositivo ${deviceIp} limpo`);
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error(`❌ Erro ao limpar cache do dispositivo ${deviceIp}:`, error.message);
+            return false;
+        }
+    }
+
+    /**
+     * Limpa cache de todos os dispositivos
+     */
+    async clearAll() {
+        try {
+            for (const deviceIp of Object.keys(this.cache)) {
+                await this.clearDevice(deviceIp);
+            }
+            console.log('🗑️  Cache de todos os dispositivos limpo');
+        } catch (error) {
+            console.error('❌ Erro ao limpar cache de todos os dispositivos:', error.message);
         }
     }
 }

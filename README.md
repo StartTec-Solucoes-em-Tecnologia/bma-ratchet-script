@@ -10,7 +10,16 @@ O sistema de registro facial foi completamente atualizado com:
 - ✅ **Remoção inteligente** antes do cadastro (evita duplicatas)
 - ✅ **Cadastro de usuário** + **Cadastro de face** em sequência
 - ✅ **Cache Redis** para rastreamento de registros
+- ✅ **Cache de imagens** para otimizar downloads
 - ✅ **Relatórios expandidos** com estatísticas detalhadas
+
+### 🖼️ Sistema de Cache de Imagens (NOVO!)
+Sistema inteligente para gerenciar imagens faciais:
+- ✅ **Cache local** de imagens baixadas
+- ✅ **Verificação automática** antes de download
+- ✅ **Download otimizado** apenas de imagens novas
+- ✅ **Metadados completos** de cada imagem
+- ✅ **Comandos de gerenciamento** do cache
 
 ### 🌐 Servidor de Checkin Intelbras (NOVO!)
 Servidor Express para receber eventos de checkin dos leitores faciais:
@@ -198,6 +207,7 @@ Para mais detalhes sobre os testes, consulte `docs/TEST-README.md`.
 - **Documentação dos Testes**: `docs/TEST-README.md`
 - **Registro de Usuários**: `docs/USER-REGISTRATION.md`
 - **Registro de Faces v2.0 (Completo)**: `docs/FACIAL-REGISTRATION-V2.md` ⭐ **Recomendado**
+- **Sistema de Cache de Imagens**: `docs/IMAGE-CACHE-SYSTEM.md` ⭐ **NOVO**
 - **Servidor de Checkin Intelbras**: `docs/CHECKIN-SERVER.md` ⭐ **NOVO**
 - **Registro de Faces v1.0**: `docs/FACIAL-REGISTRATION.md`
 
@@ -211,6 +221,20 @@ Para mais detalhes sobre os testes, consulte `docs/TEST-README.md`.
 
 ### Desenvolvimento
 - `npm run checkin-server:dev` - Servidor de checkin com auto-reload **[NOVO]**
+
+### Gerenciamento de Cache
+- `npm run cache:list` - Lista usuários registrados (todos os dispositivos)
+- `npm run cache:device <ip>` - Lista usuários de um dispositivo específico
+- `npm run cache:search <query>` - Busca usuários por nome/documento/email
+- `npm run cache:stats` - Estatísticas do cache
+- `npm run cache:clear [ip]` - Limpa cache (dispositivo específico ou todos)
+- `npm run cache:export [filename]` - Exporta cache para arquivo
+
+### Gerenciamento de Imagens
+- `npm run images:list` - Lista imagens em cache
+- `npm run images:stats` - Estatísticas do cache de imagens
+- `npm run images:cleanup` - Limpa imagens antigas
+- `npm run images:check` - Verifica integridade do cache
 
 ### Testes
 - `npm test` - Executa testes simples

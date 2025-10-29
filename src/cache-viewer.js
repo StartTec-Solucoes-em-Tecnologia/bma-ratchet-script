@@ -1,9 +1,8 @@
 const CacheManager = require('./modules/cache-manager');
-const path = require('path');
 
 /**
- * Visualizador de Cache JSON
- * Permite visualizar, filtrar e gerenciar o cache de usuários registrados
+ * Visualizador de Cache de Usuários Registrados
+ * Permite visualizar, buscar e gerenciar o cache de usuários por dispositivo
  */
 
 class CacheViewer {
@@ -16,16 +15,15 @@ class CacheViewer {
      */
     async init() {
         await this.cacheManager.init();
-        await this.cacheManager.load();
     }
 
     /**
-     * Lista todos os usuários do cache
+     * Lista todos os usuários registrados
      */
     listAllUsers() {
         const allUsers = this.cacheManager.getAllUsers();
         
-        console.log('\n📋 TODOS OS USUÁRIOS NO CACHE:');
+        console.log('\n👥 USUÁRIOS REGISTRADOS:');
         console.log('═'.repeat(80));
         
         if (allUsers.length === 0) {
@@ -33,19 +31,34 @@ class CacheViewer {
             return;
         }
 
-        allUsers.forEach((user, index) => {
-            console.log(`${index + 1}. ${user.name} (${user.type})`);
-            console.log(`   🎫 InviteId: ${user.inviteId}`);
-            console.log(`   📧 Email: ${user.email || 'N/A'}`);
-            console.log(`   📄 Documento: ${user.document || 'N/A'}`);
-            console.log(`   📱 Telefone: ${user.cellphone || 'N/A'}`);
-            console.log(`   🖥️  Dispositivo: ${user.deviceIp}`);
-            console.log(`   📅 Registrado: ${new Date(user.registeredAt).toLocaleString()}`);
-            console.log(`   🔄 Atualizado: ${new Date(user.lastUpdated).toLocaleString()}`);
-            console.log('─'.repeat(80));
+        // Agrupa por dispositivo
+        const usersByDevice = {};
+        allUsers.forEach(user => {
+            if (!usersByDevice[user.deviceIp]) {
+                usersByDevice[user.deviceIp] = [];
+            }
+            usersByDevice[user.deviceIp].push(user);
         });
 
-        console.log(`\n📊 Total: ${allUsers.length} usuários`);
+        let userIndex = 1;
+        for (const [deviceIp, deviceUsers] of Object.entries(usersByDevice)) {
+            console.log(`\n🖥️  DISPOSITIVO: ${deviceIp} (${deviceUsers.length} usuários)`);
+            console.log('─'.repeat(60));
+            
+            deviceUsers.forEach(user => {
+                console.log(`${userIndex}. ${user.name} (${user.type})`);
+                console.log(`   🎫 InviteId: ${user.inviteId}`);
+                console.log(`   📧 Email: ${user.email || 'N/A'}`);
+                console.log(`   📄 Documento: ${user.document || 'N/A'}`);
+                console.log(`   📱 Telefone: ${user.cellphone || 'N/A'}`);
+                console.log(`   📅 Registrado: ${new Date(user.registeredAt).toLocaleString()}`);
+                console.log(`   🔄 Atualizado: ${new Date(user.lastUpdated).toLocaleString()}`);
+                console.log('');
+                userIndex++;
+            });
+        }
+
+        console.log(`\n📊 Total: ${allUsers.length} usuários em ${Object.keys(usersByDevice).length} dispositivos`);
     }
 
     /**
@@ -63,12 +76,24 @@ class CacheViewer {
             console.log(`👥 Usuários: ${users.length}`);
             console.log('─'.repeat(60));
             
+            if (users.length === 0) {
+                console.log('   Nenhum usuário encontrado neste dispositivo');
+                return;
+            }
+            
             users.forEach((user, index) => {
                 console.log(`${index + 1}. ${user.name} (${user.type})`);
+                console.log(`   🎫 InviteId: ${user.inviteId}`);
                 console.log(`   📧 ${user.email || 'N/A'} | 📄 ${user.document || 'N/A'}`);
                 console.log(`   📅 ${new Date(user.registeredAt).toLocaleString()}`);
+                console.log('');
             });
         } else {
+            if (stats.totalDevices === 0) {
+                console.log('   Nenhum dispositivo encontrado no cache');
+                return;
+            }
+            
             Object.entries(stats.usersByDevice).forEach(([device, count]) => {
                 console.log(`🖥️  ${device}: ${count} usuários`);
             });
@@ -76,15 +101,22 @@ class CacheViewer {
     }
 
     /**
-     * Busca usuário por nome ou documento
+     * Busca usuário por nome, documento, email ou inviteId
      */
-    searchUser(query) {
+    searchUsers(query) {
+        if (!query) {
+            console.log('❌ Forneça um termo de busca');
+            return;
+        }
+
         const allUsers = this.cacheManager.getAllUsers();
+        const searchTerm = query.toLowerCase();
+        
         const results = allUsers.filter(user => 
-            user.name.toLowerCase().includes(query.toLowerCase()) ||
-            user.document?.includes(query) ||
-            user.email?.toLowerCase().includes(query.toLowerCase()) ||
-            user.inviteId?.includes(query)
+            user.name.toLowerCase().includes(searchTerm) ||
+            (user.document && user.document.toLowerCase().includes(searchTerm)) ||
+            (user.email && user.email.toLowerCase().includes(searchTerm)) ||
+            (user.inviteId && user.inviteId.toLowerCase().includes(searchTerm))
         );
 
         console.log(`\n🔍 RESULTADOS DA BUSCA: "${query}"`);
@@ -98,11 +130,15 @@ class CacheViewer {
         results.forEach((user, index) => {
             console.log(`${index + 1}. ${user.name} (${user.type})`);
             console.log(`   🎫 InviteId: ${user.inviteId}`);
-            console.log(`   📧 ${user.email || 'N/A'} | 📄 ${user.document || 'N/A'}`);
-            console.log(`   🖥️  ${user.deviceIp} | 📅 ${new Date(user.registeredAt).toLocaleString()}`);
+            console.log(`   📧 Email: ${user.email || 'N/A'}`);
+            console.log(`   📄 Documento: ${user.document || 'N/A'}`);
+            console.log(`   📱 Telefone: ${user.cellphone || 'N/A'}`);
+            console.log(`   🖥️  Dispositivo: ${user.deviceIp}`);
+            console.log(`   📅 Registrado: ${new Date(user.registeredAt).toLocaleString()}`);
+            console.log('─'.repeat(60));
         });
 
-        console.log(`\n📊 Encontrados: ${results.length} usuários`);
+        console.log(`\n📊 Encontrados: ${results.length} usuário(s)`);
     }
 
     /**
@@ -112,40 +148,36 @@ class CacheViewer {
         const stats = this.cacheManager.getStats();
         
         console.log('\n📊 ESTATÍSTICAS DO CACHE:');
-        console.log('═'.repeat(40));
-        console.log(`📱 Total de dispositivos: ${stats.totalDevices}`);
+        console.log('═'.repeat(50));
+        console.log(`🖥️  Total de dispositivos: ${stats.totalDevices}`);
         console.log(`👥 Total de usuários: ${stats.totalUsers}`);
-        console.log(`📄 Arquivo: ${path.join(__dirname, '..', 'cache', 'registered-users.json')}`);
-        console.log(`📦 Backups: ${path.join(__dirname, '..', 'cache', 'backups')}`);
+        console.log(`📁 Diretório de cache: cache/`);
+        console.log(`📄 Arquivos por dispositivo: device-{IP}.json`);
         
         if (stats.totalDevices > 0) {
-            console.log('\n📱 Por dispositivo:');
+            console.log('\n📱 USUÁRIOS POR DISPOSITIVO:');
             Object.entries(stats.usersByDevice).forEach(([device, count]) => {
-                console.log(`   ${device}: ${count} usuários`);
+                console.log(`   🖥️  ${device}: ${count} usuários`);
             });
         }
     }
 
     /**
-     * Limpa cache de um dispositivo específico
+     * Limpa cache de um dispositivo específico ou todos
      */
-    async clearDevice(deviceIp) {
-        try {
-            const users = this.cacheManager.getUsers(deviceIp);
-            if (users.length === 0) {
-                console.log(`⚠️  Nenhum usuário encontrado no dispositivo ${deviceIp}`);
-                return;
+    async clearCache(deviceIp = null) {
+        if (deviceIp) {
+            console.log(`\n🗑️  Limpando cache do dispositivo ${deviceIp}...`);
+            const success = await this.cacheManager.clearDevice(deviceIp);
+            if (success) {
+                console.log(`✅ Cache do dispositivo ${deviceIp} limpo com sucesso`);
+            } else {
+                console.log(`❌ Erro ao limpar cache do dispositivo ${deviceIp}`);
             }
-
-            console.log(`🗑️  Removendo ${users.length} usuários do dispositivo ${deviceIp}...`);
-            
-            for (const user of users) {
-                await this.cacheManager.removeUser(deviceIp, user.userId);
-            }
-            
-            console.log(`✅ Dispositivo ${deviceIp} limpo com sucesso`);
-        } catch (error) {
-            console.error(`❌ Erro ao limpar dispositivo ${deviceIp}:`, error.message);
+        } else {
+            console.log('\n🗑️  Limpando cache de todos os dispositivos...');
+            await this.cacheManager.clearAll();
+            console.log('✅ Cache de todos os dispositivos limpo');
         }
     }
 
@@ -153,15 +185,25 @@ class CacheViewer {
      * Exporta cache para arquivo
      */
     async exportCache(filename = null) {
+        const allUsers = this.cacheManager.getAllUsers();
+        const stats = this.cacheManager.getStats();
+        
+        const exportData = {
+            exportedAt: new Date().toISOString(),
+            stats: stats,
+            users: allUsers
+        };
+
+        const fs = require('fs').promises;
+        const path = require('path');
+        
+        const exportFile = filename || `cache-export-${new Date().toISOString().split('T')[0]}.json`;
+        const exportPath = path.join(process.cwd(), exportFile);
+        
         try {
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const exportFile = filename || `cache-export-${timestamp}.json`;
-            const exportPath = path.join(__dirname, '..', 'cache', exportFile);
-            
-            const fs = require('fs').promises;
-            await fs.writeFile(exportPath, JSON.stringify(this.cacheManager.cache, null, 2));
-            
-            console.log(`📤 Cache exportado para: ${exportPath}`);
+            await fs.writeFile(exportPath, JSON.stringify(exportData, null, 2), 'utf8');
+            console.log(`\n📤 Cache exportado para: ${exportFile}`);
+            console.log(`📊 ${allUsers.length} usuários exportados`);
         } catch (error) {
             console.error('❌ Erro ao exportar cache:', error.message);
         }
@@ -177,9 +219,13 @@ class CacheViewer {
         console.log('node src/cache-viewer.js device <ip>             - Lista usuários de um dispositivo');
         console.log('node src/cache-viewer.js search <query>          - Busca usuários');
         console.log('node src/cache-viewer.js stats                   - Mostra estatísticas');
-        console.log('node src/cache-viewer.js clear <ip>              - Limpa dispositivo');
-        console.log('node src/cache-viewer.js export [filename]       - Exporta cache');
+        console.log('node src/cache-viewer.js clear [ip]              - Limpa cache (dispositivo ou todos)');
+        console.log('node src/cache-viewer.js export [filename]       - Exporta cache para arquivo');
         console.log('node src/cache-viewer.js help                    - Mostra esta ajuda');
+        console.log('\n💡 Exemplos:');
+        console.log('  node src/cache-viewer.js device 10.1.35.87');
+        console.log('  node src/cache-viewer.js search "João Silva"');
+        console.log('  node src/cache-viewer.js clear 10.1.35.87');
     }
 }
 
@@ -196,28 +242,16 @@ async function main() {
             viewer.listAllUsers();
             break;
         case 'device':
-            if (!arg) {
-                console.log('❌ Especifique o IP do dispositivo');
-                process.exit(1);
-            }
             viewer.listUsersByDevice(arg);
             break;
         case 'search':
-            if (!arg) {
-                console.log('❌ Especifique o termo de busca');
-                process.exit(1);
-            }
-            viewer.searchUser(arg);
+            viewer.searchUsers(arg);
             break;
         case 'stats':
             viewer.showStats();
             break;
         case 'clear':
-            if (!arg) {
-                console.log('❌ Especifique o IP do dispositivo');
-                process.exit(1);
-            }
-            await viewer.clearDevice(arg);
+            await viewer.clearCache(arg);
             break;
         case 'export':
             await viewer.exportCache(arg);

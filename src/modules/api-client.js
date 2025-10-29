@@ -174,7 +174,8 @@ class ApiClient {
                 console.log(`   ✅ ${stats.usersDeleted} usuários deletados`);
             }
 
-            // 3. Cadastrar usuários
+            // 3. Cadastrar usuários (SEM faces ainda)
+            console.log(`   👤 Cadastrando ${userBatch.length} usuários...`);
             const userRegResult = await this.registerUsers(deviceIp, userBatch);
             if (!userRegResult.success) {
                 return {
@@ -184,11 +185,14 @@ class ApiClient {
                 };
             }
             stats.usersRegistered += userBatch.length;
+            console.log(`   ✅ ${userBatch.length} usuários cadastrados`);
 
-            // Pequena pausa entre cadastro de usuário e face
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // 4. Aguardar estabilização
+            console.log(`   ⏳ Aguardando estabilização (2s)...`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
 
-            // 4. Cadastrar faces
+            // 5. Cadastrar faces
+            console.log(`   🎭 Cadastrando ${userBatch.length} faces...`);
             const faceRegResult = await this.registerFaces(deviceIp, userBatch);
             if (!faceRegResult.success) {
                 return {
@@ -198,6 +202,7 @@ class ApiClient {
                 };
             }
             stats.facesRegistered += userBatch.length;
+            console.log(`   ✅ ${userBatch.length} faces cadastradas`);
 
             console.log(`   ✅ Lote completo registrado na leitora ${deviceIp}`);
             

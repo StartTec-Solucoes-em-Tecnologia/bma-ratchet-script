@@ -1,5 +1,6 @@
 const CacheManager = require('./modules/cache-manager');
 const ImageProcessor = require('./modules/image-processor');
+const ImageCacheManager = require('./modules/image-cache-manager');
 const ApiClient = require('./modules/api-client');
 const UserManager = require('./modules/user-manager');
 require('dotenv').config();
@@ -13,6 +14,7 @@ class FacialRegistrationService {
     constructor() {
         this.cacheManager = new CacheManager();
         this.imageProcessor = new ImageProcessor();
+        this.imageCacheManager = new ImageCacheManager();
         this.apiClient = new ApiClient();
         this.userManager = new UserManager();
     }
@@ -28,6 +30,7 @@ class FacialRegistrationService {
         await this.userManager.initRedis();
         await this.cacheManager.init();
         await this.cacheManager.load();
+        await this.imageCacheManager.init();
         
         // Sincroniza cache JSON com Redis
         await this.cacheManager.syncWithRedis(this.userManager.redisClient);
@@ -54,10 +57,19 @@ class FacialRegistrationService {
                 };
             }
 
-            console.log(`\n📸 Processando ${users.length} imagens faciais...\n`);
+            console.log(`\n📥 Baixando ${users.length} imagens faciais...\n`);
 
-            // Processa imagens de todos os usuários
-            const { processedUsers, processedCount, errorCount } = await this.imageProcessor.processBatch(users);
+            // 1. Baixa todas as imagens (verifica cache primeiro)
+            const downloadResults = await this.imageCacheManager.downloadAllImages(users);
+
+            if (downloadResults.users.length === 0) {
+                throw new Error('Nenhuma imagem foi baixada com sucesso');
+            }
+
+            console.log(`\n📸 Processando ${downloadResults.users.length} imagens para base64...\n`);
+
+            // 2. Processa imagens baixadas (converte para base64)
+            const { processedUsers, processedCount, errorCount } = await this.imageProcessor.processBatch(downloadResults.users);
 
             console.log(`\n📊 Processamento de imagens concluído:`);
             console.log(`   ✅ Sucesso: ${processedCount}`);
@@ -192,6 +204,13 @@ class FacialRegistrationService {
         console.log(`   🎭 Faces cadastradas: ${globalStats.facesRegistered}`);
         console.log(`   💾 Saves no Redis: ${globalStats.redisSaves}`);
         console.log(`   📄 Cache JSON: Ativo`);
+        
+        // Estatísticas do cache de imagens
+        const imageCacheStats = this.imageCacheManager.getCacheStats();
+        console.log(`\n📷 Cache de Imagens:`);
+        console.log(`   📁 Total de imagens: ${imageCacheStats.totalImages}`);
+        console.log(`   💾 Tamanho total: ${imageCacheStats.totalSizeMB}MB`);
+        
         console.log(`\n📈 Resultados:`);
         console.log(`   ✅ Lotes bem-sucedidos: ${globalStats.successfulBatches}`);
         console.log(`   ❌ Lotes com erro: ${globalStats.failedBatches}`);

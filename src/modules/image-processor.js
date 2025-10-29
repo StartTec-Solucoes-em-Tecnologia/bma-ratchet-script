@@ -1,9 +1,9 @@
-const axios = require('axios');
+const fs = require('fs').promises;
 const sharp = require('sharp');
 
 /**
  * Processador de Imagens Faciais
- * Responsável por download, redimensionamento, compressão e conversão para base64
+ * Responsável por processamento de imagens em cache, redimensionamento, compressão e conversão para base64
  */
 
 class ImageProcessor {
@@ -13,21 +13,14 @@ class ImageProcessor {
     }
 
     /**
-     * Baixa imagem de uma URL
+     * Carrega imagem do cache local
      */
-    async downloadImage(imageUrl) {
+    async loadImageFromCache(imagePath) {
         try {
-            const response = await axios.get(imageUrl, {
-                responseType: 'arraybuffer',
-                timeout: 30000,
-                headers: {
-                    'User-Agent': 'BMA-Facial-Registration/2.0.0'
-                }
-            });
-            
-            return Buffer.from(response.data);
+            const imageBuffer = await fs.readFile(imagePath);
+            return imageBuffer;
         } catch (error) {
-            throw new Error(`Erro ao baixar imagem: ${error.message}`);
+            throw new Error(`Erro ao carregar imagem do cache: ${error.message}`);
         }
     }
 
@@ -72,12 +65,12 @@ class ImageProcessor {
     }
 
     /**
-     * Processa imagem completa: download + processamento + base64
+     * Processa imagem completa: carregamento do cache + processamento + base64
      */
     async processUserImage(user) {
         try {
-            // Download da imagem
-            const imageBuffer = await this.downloadImage(user.facialImageUrl);
+            // Carrega imagem do cache
+            const imageBuffer = await this.loadImageFromCache(user.imagePath);
             
             // Processa imagem (redimensiona e comprime)
             const processedImage = await this.processImage(imageBuffer);
