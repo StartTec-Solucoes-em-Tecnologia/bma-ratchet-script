@@ -3,11 +3,12 @@ const ImageProcessor = require('./modules/image-processor');
 const ImageCacheManager = require('./modules/image-cache-manager');
 const ApiClient = require('./modules/api-client');
 const UserManager = require('./modules/user-manager');
+const DeviceProcessor = require('./device-processor');
 require('dotenv').config();
 
 /**
  * Script Principal de Registro Facial v2.0
- * Arquivo simplificado que orquestra todos os módulos
+ * Sistema de processamento paralelo por dispositivo
  */
 
 class FacialRegistrationService {
@@ -17,6 +18,7 @@ class FacialRegistrationService {
         this.imageCacheManager = new ImageCacheManager();
         this.apiClient = new ApiClient();
         this.userManager = new UserManager();
+        this.deviceProcessor = new DeviceProcessor();
     }
 
     /**
@@ -24,7 +26,7 @@ class FacialRegistrationService {
      */
     async init() {
         console.log('🚀 BMA Facial Registration Script v2.0.0');
-        console.log('   Sistema Modular: Cache JSON + Redis + Processamento Assíncrono\n');
+        console.log('   Sistema Paralelo: Processo separado por dispositivo\n');
 
         // Inicializa componentes
         await this.userManager.initRedis();
@@ -38,18 +40,14 @@ class FacialRegistrationService {
     /**
      * Processo principal de registro facial
      */
-    async registerAllFaces() {
+    async registerAllFacesInAllDevices() {
         try {
-            // Verifica variáveis de ambiente
-            const deviceIps = process.env.FACE_READER_IPS;
-            if (!deviceIps) {
-                throw new Error('Variável de ambiente FACE_READER_IPS não está definida');
-            }
-
             // Busca usuários com facial_image
+            console.log('🔍 Buscando usuários com imagens faciais...');
             const users = await this.userManager.fetchInvitesWithFacialImages();
+            
             if (users.length === 0) {
-                console.log('⚠️  Nenhum usuário com facial_image encontrado');
+                console.log('ℹ️  Nenhum usuário encontrado com imagem facial');
                 return {
                     success: true,
                     message: 'Nenhum usuário para processar'
@@ -87,6 +85,11 @@ class FacialRegistrationService {
             console.log(`   ✅ ${usersWithFormattedNames.length} nomes formatados\n`);
 
             // Converte string de IPs em array
+            const deviceIps = process.env.FACE_READER_IPS || process.env.DEVICE_IPS;
+            if (!deviceIps) {
+                throw new Error('FACE_READER_IPS ou DEVICE_IPS não está definido nas variáveis de ambiente');
+            }
+
             const ipArray = deviceIps.split(',').map(ip => ip.trim());
             
             console.log(`📡 Registrando em ${ipArray.length} leitora(s) facial(is)...`);
@@ -109,101 +112,78 @@ class FacialRegistrationService {
 
             const results = [];
 
-            // Processa cada lote em cada leitora
+            // Processa cada lote em paralelo em todas as leitoras
             for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
                 const batch = batches[batchIndex];
                 console.log(`\n═══════════════════════════════════════════`);
                 console.log(`📦 Lote ${batchIndex + 1}/${batches.length} (${batch.length} usuários)`);
                 console.log(`═══════════════════════════════════════════`);
                 
-                for (const deviceIp of ipArray) {
-                    const batchStats = {
-                        usersVerified: 0,
-                        usersDeleted: 0,
-                        usersRegistered: 0,
-                        facesRegistered: 0,
-                        redisSaves: 0
-                    };
-
-                    // Processa lote na leitora
-                    const result = await this.apiClient.processBatch(deviceIp, batch, batchStats);
-                    
-                    // Salva usuários no cache JSON e Redis
-                    for (const user of batch) {
-                        const saveResult = await this.userManager.saveUser(deviceIp, user.userId, {
-                            name: user.name,
-                            email: user.email,
-                            document: user.document,
-                            cellphone: user.cellphone,
-                            type: user.type,
-                            inviteId: user.inviteId
-                        }, this.cacheManager);
-                        
-                        if (saveResult.success) {
-                            batchStats.redisSaves++;
-                        }
-                    }
-                    
-                    // Atualiza estatísticas globais
-                    globalStats.usersVerified += batchStats.usersVerified;
-                    globalStats.usersDeleted += batchStats.usersDeleted;
-                    globalStats.usersRegistered += batchStats.usersRegistered;
-                    globalStats.facesRegistered += batchStats.facesRegistered;
-                    globalStats.redisSaves += batchStats.redisSaves;
-                    
-                    if (result.success) {
-                        globalStats.successfulBatches++;
-                    } else {
-                        globalStats.failedBatches++;
+                // Processa todas as leitoras em paralelo para este lote
+                const batchResult = await this.deviceProcessor.processMultipleDevices(ipArray, batch, batchIndex);
+                
+                // Atualiza estatísticas globais
+                globalStats.successfulBatches += batchResult.successful;
+                globalStats.failedBatches += batchResult.failed;
+                
+                // Processa resultados individuais
+                for (const result of batchResult.results) {
+                    if (result.success && result.data) {
+                        const stats = result.data.stats;
+                        globalStats.usersVerified += stats.usersVerified;
+                        globalStats.usersDeleted += stats.usersDeleted;
+                        globalStats.usersRegistered += stats.usersRegistered;
+                        globalStats.facesRegistered += stats.facesRegistered;
+                        globalStats.redisSaves += stats.redisSaves;
                     }
 
                     results.push({
-                        deviceIp,
-                        batch: batchIndex + 1,
+                        deviceIp: result.deviceIp,
+                        batchIndex: batchIndex + 1,
                         success: result.success,
-                        stats: batchStats
+                        error: result.error,
+                        stats: result.data?.stats || {}
                     });
 
-                    // Pausa entre dispositivos
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    console.log(`\n📊 Resultado da leitora ${result.deviceIp}:`);
+                    console.log(`   ✅ Sucesso: ${result.success ? 'Sim' : 'Não'}`);
+                    if (!result.success) {
+                        console.log(`   ❌ Erro: ${result.error}`);
+                    }
+                    if (result.data?.stats) {
+                        const stats = result.data.stats;
+                        console.log(`   👀 Usuários verificados: ${stats.usersVerified}`);
+                        console.log(`   🗑️  Usuários deletados: ${stats.usersDeleted}`);
+                        console.log(`   👤 Usuários cadastrados: ${stats.usersRegistered}`);
+                        console.log(`   🎭 Faces cadastradas: ${stats.facesRegistered}`);
+                        console.log(`   💾 Saves no Redis: ${stats.redisSaves}`);
+                    }
                 }
             }
 
             // Relatório final
-            this.printFinalReport(users, processedCount, errorCount, ipArray, batches, globalStats, results);
+            this.showFinalReport(globalStats, results, ipArray);
 
             return {
-                success: globalStats.failedBatches === 0,
-                totalUsers: users.length,
-                processedImages: processedCount,
-                processingErrors: errorCount,
-                devices: ipArray.length,
-                batches: batches.length,
+                success: true,
                 stats: globalStats,
-                results
+                results: results
             };
 
         } catch (error) {
-            console.error('❌ Erro no processo principal:', error.message);
+            console.error('❌ Erro fatal:', error.message);
             throw error;
-        } finally {
-            // Fecha conexões
-            await this.userManager.close();
         }
     }
 
     /**
-     * Imprime relatório final
+     * Mostra relatório final
      */
-    printFinalReport(users, processedCount, errorCount, ipArray, batches, globalStats, results) {
-        console.log('\n\n═══════════════════════════════════════════');
-        console.log('📊 RELATÓRIO FINAL COMPLETO - v2.0');
-        console.log('═══════════════════════════════════════════');
-        console.log(`👥 Total de usuários: ${users.length}`);
-        console.log(`✅ Imagens processadas: ${processedCount}`);
-        console.log(`❌ Erros no processamento: ${errorCount}`);
-        console.log(`📡 Leitoras faciais: ${ipArray.length}`);
-        console.log(`📦 Lotes processados: ${batches.length}`);
+    showFinalReport(globalStats, results, ipArray) {
+        console.log('\n' + '═'.repeat(60));
+        console.log('📊 RELATÓRIO FINAL - REGISTRO FACIAL PARALELO');
+        console.log('═'.repeat(60));
+        
         console.log(`\n🔍 Operações Realizadas:`);
         console.log(`   👀 Usuários verificados: ${globalStats.usersVerified}`);
         console.log(`   🗑️  Usuários deletados: ${globalStats.usersDeleted}`);
@@ -221,47 +201,48 @@ class FacialRegistrationService {
         console.log(`\n📈 Resultados:`);
         console.log(`   ✅ Lotes bem-sucedidos: ${globalStats.successfulBatches}`);
         console.log(`   ❌ Lotes com erro: ${globalStats.failedBatches}`);
-        console.log('═══════════════════════════════════════════\n');
+        console.log('═'.repeat(60));
 
         // Detalhes por leitora
-        console.log('📋 DETALHES POR LEITORA:');
+        console.log('\n📋 DETALHES POR LEITORA:');
         ipArray.forEach(ip => {
             const deviceResults = results.filter(r => r.deviceIp === ip);
-            const deviceSuccess = deviceResults.filter(r => r.success).length;
-            const deviceFailure = deviceResults.filter(r => !r.success).length;
-            const status = deviceFailure === 0 ? '✅' : '⚠️';
+            const successful = deviceResults.filter(r => r.success).length;
+            const failed = deviceResults.filter(r => !r.success).length;
             
-            console.log(`${status} ${ip}: ${deviceSuccess}/${deviceResults.length} lotes OK`);
+            console.log(`\n🖥️  ${ip}:`);
+            console.log(`   ✅ Sucessos: ${successful}`);
+            console.log(`   ❌ Falhas: ${failed}`);
+            
+            if (failed > 0) {
+                console.log(`   📋 Erros:`);
+                deviceResults
+                    .filter(r => !r.success)
+                    .forEach(r => {
+                        console.log(`     - Lote ${r.batchIndex}: ${r.error}`);
+                    });
+            }
         });
 
-        // Estatísticas do cache
-        const cacheStats = this.cacheManager.getStats();
-        console.log(`\n📄 ESTATÍSTICAS DO CACHE JSON:`);
-        console.log(`   📱 Dispositivos: ${cacheStats.totalDevices}`);
-        console.log(`   👥 Total de usuários: ${cacheStats.totalUsers}`);
-        Object.entries(cacheStats.usersByDevice).forEach(([device, count]) => {
-            console.log(`   📍 ${device}: ${count} usuários`);
-        });
-    }
-
-    /**
-     * Executa o serviço completo
-     */
-    async run() {
-        try {
-            await this.init();
-            return await this.registerAllFaces();
-        } catch (error) {
-            console.error('❌ Erro fatal:', error.message);
-            process.exit(1);
-        }
+        console.log('\n🎉 Processamento paralelo concluído!');
+        console.log('═'.repeat(60) + '\n');
     }
 }
 
-// Execução se chamado diretamente
+// Execução principal
+async function main() {
+    try {
+        const registration = new FacialRegistrationService();
+        await registration.init();
+        await registration.registerAllFacesInAllDevices();
+    } catch (error) {
+        console.error('❌ Erro fatal:', error);
+        process.exit(1);
+    }
+}
+
 if (require.main === module) {
-    const service = new FacialRegistrationService();
-    service.run();
+    main();
 }
 
 module.exports = FacialRegistrationService;

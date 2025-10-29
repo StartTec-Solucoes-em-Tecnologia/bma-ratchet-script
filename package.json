@@ -4,6 +4,7 @@
   "main": "src/index.js",
   "scripts": {
     "register-faces-v2": "node src/facial-registration-v2.js",
+    "register-faces-individual": "node src/facial-registration-individual.js",
     "checkin-server": "node src/checkin-server.js",
     "cache:list": "node src/cache-viewer.js list",
     "cache:device": "node src/cache-viewer.js device",

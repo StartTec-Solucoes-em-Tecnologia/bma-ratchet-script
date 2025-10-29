@@ -71,55 +71,62 @@ class ApiClient {
     }
 
     /**
-     * Cadastra um único usuário na leitora
+     * Cadastra um único usuário na leitora usando API V1
      */
     async registerSingleUser(deviceIp, user) {
         try {
-            const url = `http://${deviceIp}/cgi-bin/AccessUser.cgi?action=insertMulti`;
             const axiosDigest = this.createDigestAuth();
 
             // Valida dados do usuário
             const userName = user.formattedName || user.name || 'Usuario';
             const cleanUserName = userName.substring(0, 50).replace(/[^\w\s]/g, '').trim();
+            const userId = user.userId || Date.now();
             
-            const validatedUser = {
-                UserID: String(user.userId || Date.now()),
-                UserName: cleanUserName || 'Usuario',
-                UserType: 0,
-                Authority: 1,
-                Doors: [0],
-                TimeSections: [255],
-                ValidFrom: "2024-01-01 00:00:00",
-                ValidTo: "2037-12-31 23:59:59"
-            };
+            // Gera CardNo em hexadecimal (simples)
+            const cardNo = userId.toString(16).toUpperCase().padStart(8, '0');
+            
+            // Formata datas
+            const validDateStart = "20240101 000000";
+            const validDateEnd = "20371231 235959";
+            
+            // Monta URL com parâmetros
+            const url = `http://${deviceIp}/cgi-bin/recordUpdater.cgi?` + 
+                `action=insert&` +
+                `name=AccessControlCard&` +
+                `CardNo=${cardNo}&` +
+                `CardStatus=0&` +
+                `CardName=${encodeURIComponent(cleanUserName)}&` +
+                `UserID=${userId}&` +
+                `Password=123456&` +
+                `ValidDateStart=${validDateStart}&` +
+                `ValidDateEnd=${validDateEnd}`;
 
-            const payload = {
-                UserList: [validatedUser]
-            };
+            console.log(`     🔗 URL: ${url}`);
 
             const response = await axiosDigest.request({
-                method: 'POST',
+                method: 'GET',
                 url,
                 headers: {
-                    'Content-Type': 'application/json',
                     'User-Agent': 'BMA-Facial-Registration/2.0.0'
                 },
-                data: JSON.stringify(payload),
                 timeout: 30000
             });
 
             const responseText = response.data.trim();
-            const isSuccess = responseText === 'OK';
+            const isSuccess = responseText.startsWith('RecNo=');
             
             if (!isSuccess) {
-                console.warn(`⚠️  Falha ao cadastrar usuário ${user.userId}: "${responseText}"`);
+                console.warn(`⚠️  Falha ao cadastrar usuário ${userId}: "${responseText}"`);
+            } else {
+                console.log(`     ✅ Usuário ${userId} cadastrado - ${responseText}`);
             }
 
             return { 
                 success: isSuccess, 
                 response: responseText, 
-                userId: user.userId,
-                userName: cleanUserName
+                userId: userId,
+                userName: cleanUserName,
+                cardNo: cardNo
             };
         } catch (error) {
             let errorDetails = error.message;
@@ -212,11 +219,10 @@ class ApiClient {
     }
 
     /**
-     * Cadastra uma única face na leitora
+     * Cadastra uma única face na leitora usando API individual
      */
     async registerSingleFace(deviceIp, user) {
         try {
-            const url = `http://${deviceIp}/cgi-bin/AccessFace.cgi?action=insertMulti`;
             const axiosDigest = this.createDigestAuth();
 
             if (!user.photoBase64) {
@@ -224,12 +230,15 @@ class ApiClient {
                 return { success: false, error: 'Sem dados de foto', userId: user.userId };
             }
 
+            // Usa a API individual de face
+            const url = `http://${deviceIp}/cgi-bin/AccessFace.cgi?action=insert`;
+            
             const payload = {
-                FaceList: [{
-                    UserID: String(user.userId),
-                    PhotoData: [user.photoBase64]
-                }]
+                UserID: String(user.userId),
+                PhotoData: user.photoBase64
             };
+
+            console.log(`     🎭 Cadastrando face do usuário ${user.userId}...`);
 
             const response = await axiosDigest.request({
                 method: 'POST',
@@ -247,6 +256,8 @@ class ApiClient {
             
             if (!isSuccess) {
                 console.warn(`⚠️  Falha ao cadastrar face do usuário ${user.userId}: "${responseText}"`);
+            } else {
+                console.log(`     ✅ Face do usuário ${user.userId} cadastrada`);
             }
 
             return { 
