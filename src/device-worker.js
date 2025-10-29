@@ -81,44 +81,97 @@ class DeviceWorker {
                 console.log(`   ✅ ${stats.usersDeleted} usuários deletados`);
             }
 
-            // 3. Cadastrar usuários individualmente
-            console.log(`   👤 Cadastrando ${users.length} usuários...`);
-            const userRegResult = await this.apiClient.registerUsers(deviceIp, users);
-            if (!userRegResult.success) {
-                throw new Error(`Falha ao cadastrar usuários: ${userRegResult.error || 'Erro desconhecido'}`);
-            }
-            stats.usersRegistered += userRegResult.successCount || users.length;
-            console.log(`   ✅ ${userRegResult.successCount || users.length} usuários cadastrados`);
-
-            // 4. Aguardar estabilização e verificar usuários cadastrados
-            console.log(`   ⏳ Aguardando estabilização (5s)...`);
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            // ========================================
+            // FASE 1: CADASTRAR TODOS OS USUÁRIOS EM LOTES DE 10
+            // ========================================
+            const BATCH_SIZE = 10;
+            const totalBatches = Math.ceil(users.length / BATCH_SIZE);
             
-            console.log(`   🔍 Verificando se usuários foram realmente cadastrados...`);
+            console.log(`\n   ═══════════════════════════════════════════`);
+            console.log(`   📋 FASE 1: CADASTRO DE USUÁRIOS`);
+            console.log(`   📦 ${users.length} usuários em ${totalBatches} lote(s) de até ${BATCH_SIZE}`);
+            console.log(`   ═══════════════════════════════════════════\n`);
+
+            for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+                const start = batchIndex * BATCH_SIZE;
+                const end = Math.min(start + BATCH_SIZE, users.length);
+                const batch = users.slice(start, end);
+                
+                console.log(`   📦 Lote ${batchIndex + 1}/${totalBatches} (${batch.length} usuários)`);
+
+                // Cadastrar usuários do lote
+                const userRegResult = await this.apiClient.registerUsers(deviceIp, batch);
+                if (!userRegResult.success) {
+                    console.warn(`   ⚠️  Falha ao cadastrar alguns usuários do lote`);
+                }
+                stats.usersRegistered += userRegResult.successCount || 0;
+                console.log(`   ✅ ${userRegResult.successCount || 0} usuários cadastrados\n`);
+                
+                // Pausa entre lotes (exceto no último)
+                if (batchIndex < totalBatches - 1) {
+                    console.log(`   ⏳ Pausa entre lotes (2s)...`);
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+            }
+            
+            console.log(`   ✅ FASE 1 CONCLUÍDA: ${stats.usersRegistered} usuários cadastrados\n`);
+
+            // Aguardar estabilização geral após todos os usuários
+            console.log(`   ⏳ Aguardando estabilização geral (10s)...`);
+            await new Promise(resolve => setTimeout(resolve, 10000));
+            
+            // ========================================
+            // VERIFICAÇÃO: CONFIRMAR USUÁRIOS CADASTRADOS
+            // ========================================
+            console.log(`\n   🔍 Verificando usuários cadastrados no dispositivo...`);
             const verifyUsers = await this.apiClient.fetchExistingUsers(deviceIp);
             const verifyUserIds = new Set(verifyUsers.map(u => u.userId));
             const usersNotFound = users.filter(u => !verifyUserIds.has(u.userId));
             
             if (usersNotFound.length > 0) {
                 console.warn(`   ⚠️  ${usersNotFound.length} usuários não encontrados após cadastro:`);
-                usersNotFound.forEach(u => console.warn(`     - ${u.userId} (${u.formattedName || u.name})`));
-            } else {
-                console.log(`   ✅ Todos os ${users.length} usuários verificados no dispositivo`);
+                usersNotFound.forEach(u => console.warn(`     - ${u.formattedName || u.name}`));
             }
-
-            // 5. Cadastrar faces apenas para usuários verificados
-            const usersToRegisterFace = users.filter(u => verifyUserIds.has(u.userId));
             
+            const usersToRegisterFace = users.filter(u => verifyUserIds.has(u.userId));
+            console.log(`   ✅ ${usersToRegisterFace.length}/${users.length} usuários confirmados no dispositivo\n`);
+
+            // ========================================
+            // FASE 2: CADASTRAR TODAS AS FACES EM LOTES DE 10
+            // ========================================
             if (usersToRegisterFace.length === 0) {
-                console.warn(`   ⚠️  Nenhum usuário encontrado para cadastro de face`);
+                console.warn(`   ⚠️  Nenhum usuário encontrado para cadastro de faces`);
             } else {
-                console.log(`   🎭 Cadastrando ${usersToRegisterFace.length} faces...`);
-                const faceRegResult = await this.apiClient.registerFaces(deviceIp, usersToRegisterFace);
-                if (!faceRegResult.success) {
-                    console.warn(`   ⚠️  Algumas faces falharam no cadastro`);
+                const faceBatches = Math.ceil(usersToRegisterFace.length / BATCH_SIZE);
+                
+                console.log(`   ═══════════════════════════════════════════`);
+                console.log(`   📋 FASE 2: CADASTRO DE FACES`);
+                console.log(`   🎭 ${usersToRegisterFace.length} faces em ${faceBatches} lote(s) de até ${BATCH_SIZE}`);
+                console.log(`   ═══════════════════════════════════════════\n`);
+
+                for (let batchIndex = 0; batchIndex < faceBatches; batchIndex++) {
+                    const start = batchIndex * BATCH_SIZE;
+                    const end = Math.min(start + BATCH_SIZE, usersToRegisterFace.length);
+                    const batch = usersToRegisterFace.slice(start, end);
+                    
+                    console.log(`   🎭 Lote ${batchIndex + 1}/${faceBatches} (${batch.length} faces)`);
+
+                    // Cadastrar faces do lote
+                    const faceRegResult = await this.apiClient.registerFaces(deviceIp, batch);
+                    if (!faceRegResult.success) {
+                        console.warn(`   ⚠️  Algumas faces falharam no cadastro`);
+                    }
+                    stats.facesRegistered += faceRegResult.successCount || 0;
+                    console.log(`   ✅ ${faceRegResult.successCount || 0} faces cadastradas\n`);
+                    
+                    // Pausa entre lotes (exceto no último)
+                    if (batchIndex < faceBatches - 1) {
+                        console.log(`   ⏳ Pausa entre lotes (2s)...`);
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                    }
                 }
-                stats.facesRegistered += faceRegResult.successCount || 0;
-                console.log(`   ✅ ${faceRegResult.successCount || 0} faces cadastradas`);
+                
+                console.log(`   ✅ FASE 2 CONCLUÍDA: ${stats.facesRegistered} faces cadastradas\n`);
             }
 
             // 6. Salvar no cache
