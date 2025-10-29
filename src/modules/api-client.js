@@ -81,7 +81,7 @@ class ApiClient {
             const payload = {
                 UserList: userBatch.map(user => ({
                     UserID: user.userId,
-                    UserName: user.name.substring(0, 50),
+                    UserName: user.formattedName || user.name.substring(0, 50),
                     UserType: 0,
                     Authority: 1,
                     Doors: [0],
@@ -90,6 +90,9 @@ class ApiClient {
                     ValidTo: "2037-12-31 23:59:59"
                 }))
             };
+
+            console.log(`   📤 Enviando ${userBatch.length} usuários para ${deviceIp}...`);
+            console.log(`   📝 Nomes: ${userBatch.map(u => u.formattedName || u.name).join(', ')}`);
 
             const response = await axiosDigest.request({
                 method: 'POST',
@@ -102,7 +105,16 @@ class ApiClient {
                 timeout: 30000
             });
 
-            return { success: response.data.trim() === 'OK' };
+            const responseText = response.data.trim();
+            const isSuccess = responseText === 'OK';
+            
+            if (!isSuccess) {
+                console.warn(`⚠️  Resposta inesperada do dispositivo ${deviceIp}: "${responseText}"`);
+            } else {
+                console.log(`   ✅ Usuários cadastrados com sucesso em ${deviceIp}`);
+            }
+
+            return { success: isSuccess, response: responseText };
         } catch (error) {
             console.error(`❌ Erro ao cadastrar usuários em ${deviceIp}:`, error.message);
             return { success: false, error: error.message };
@@ -124,6 +136,8 @@ class ApiClient {
                 }))
             };
 
+            console.log(`   🎭 Enviando ${userBatch.length} faces para ${deviceIp}...`);
+
             const response = await axiosDigest.request({
                 method: 'POST',
                 url,
@@ -135,7 +149,16 @@ class ApiClient {
                 timeout: 30000
             });
 
-            return { success: response.data.trim() === 'OK' };
+            const responseText = response.data.trim();
+            const isSuccess = responseText === 'OK';
+            
+            if (!isSuccess) {
+                console.warn(`⚠️  Resposta inesperada do dispositivo ${deviceIp} (faces): "${responseText}"`);
+            } else {
+                console.log(`   ✅ Faces cadastradas com sucesso em ${deviceIp}`);
+            }
+
+            return { success: isSuccess, response: responseText };
         } catch (error) {
             console.error(`❌ Erro ao cadastrar faces em ${deviceIp}:`, error.message);
             return { success: false, error: error.message };

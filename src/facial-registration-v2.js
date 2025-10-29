@@ -78,6 +78,14 @@ class FacialRegistrationService {
                 throw new Error('Nenhuma imagem foi processada com sucesso');
             }
 
+            // 3. Formata nomes para os dispositivos (primeiro nome + último sobrenome)
+            console.log(`📝 Formatando nomes para dispositivos...`);
+            const usersWithFormattedNames = processedUsers.map(user => ({
+                ...user,
+                formattedName: this.userManager.formatNameForDevice(user.name)
+            }));
+            console.log(`   ✅ ${usersWithFormattedNames.length} nomes formatados\n`);
+
             // Converte string de IPs em array
             const ipArray = deviceIps.split(',').map(ip => ip.trim());
             
@@ -85,7 +93,7 @@ class FacialRegistrationService {
             console.log(`   IPs: ${ipArray.join(', ')}\n`);
 
             // Divide usuários em lotes de 10 (limite da API)
-            const batches = this.userManager.chunkArray(processedUsers, 10);
+            const batches = this.userManager.chunkArray(usersWithFormattedNames, 10);
             console.log(`📦 Total de lotes: ${batches.length} (máx 10 usuários por lote)\n`);
 
             // Estatísticas globais
