@@ -372,7 +372,8 @@ class ApiClient {
             const url = `http://${deviceIp}/cgi-bin/AccessFace.cgi?action=insertMulti`;
 
             console.log(`   🔗 URL: ${url}`);
-            console.log(`   📝 Enviando ${faceList.length} faces no lote`);
+            console.log(`   📝 Enviando ${faceList.length} faces DE UMA VEZ no lote`);
+            console.log(`   🎭 UserIDs: ${faceList.map(f => f.UserID).join(', ')}`);
 
             const response = await axiosDigest.request({
                 method: 'POST',
