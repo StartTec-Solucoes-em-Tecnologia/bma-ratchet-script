@@ -145,7 +145,8 @@ class DeviceWorker {
             // 6. Salvar no cache
             console.log(`   💾 Salvando no cache...`);
             for (const user of users) {
-                const saveResult = await this.userManager.saveUser(deviceIp, user.userId, {
+                // USA O INVITE ID como identificador único
+                const saveResult = await this.userManager.saveUser(deviceIp, user.inviteId || user.userId, {
                     name: user.name,
                     email: user.email,
                     document: user.document,

@@ -80,11 +80,12 @@ class ApiClient {
             // Valida dados do usuário
             const userName = user.formattedName || user.name || 'Usuario';
             const cleanUserName = userName.substring(0, 50).replace(/[^\w\s]/g, '').trim();
-            const userId = String(user.userId || Date.now());
+            // USA O INVITE ID COMO USER ID NA CATRACA
+            const userIdForDevice = String(user.inviteId || user.userId || Date.now());
             
             // Monta payload para um único usuário
             const userData = {
-                UserID: userId,
+                UserID: userIdForDevice,
                 UserName: cleanUserName,
                 UserType: 0, // General user
                 Authority: 2, // Usuário normal (não administrador)
@@ -158,10 +159,11 @@ class ApiClient {
             const userList = userBatch.map(user => {
                 const userName = user.formattedName || user.name || 'Usuario';
                 const cleanUserName = userName.substring(0, 50).replace(/[^\w\s]/g, '').trim();
-                const userId = String(user.userId || Date.now());
+                // USA O INVITE ID COMO USER ID NA CATRACA
+                const userIdForDevice = String(user.inviteId || user.userId || Date.now());
                 
                 return {
-                    UserID: userId,
+                    UserID: userIdForDevice,
                     UserName: cleanUserName,
                     UserType: 0, // General user
                     Authority: 2, // Usuário normal
@@ -264,15 +266,18 @@ class ApiClient {
             const axiosDigest = this.createDigestAuth();
 
             if (!user.photoBase64) {
-                console.warn(`⚠️  Usuário ${user.userId} sem dados de foto`);
-                return { success: false, error: 'Sem dados de foto', userId: user.userId };
+                console.warn(`⚠️  Usuário ${user.inviteId || user.userId} sem dados de foto`);
+                return { success: false, error: 'Sem dados de foto', userId: user.inviteId || user.userId };
             }
 
             // Usa a API V2 de face (individual)
             const url = `http://${deviceIp}/cgi-bin/AccessFace.cgi?action=insertMulti`;
             
+            // USA O INVITE ID COMO USER ID NA CATRACA
+            const userIdForDevice = String(user.inviteId || user.userId);
+            
             const faceData = {
-                UserID: String(user.userId),
+                UserID: userIdForDevice,
                 PhotoData: [user.photoBase64]
             };
 
@@ -344,12 +349,15 @@ class ApiClient {
             // Prepara lista de faces para o batch
             const faceList = userBatch.map(user => {
                 if (!user.photoBase64) {
-                    console.warn(`   ⚠️  Usuário ${user.userId} sem dados de foto`);
+                    console.warn(`   ⚠️  Usuário ${user.inviteId || user.userId} sem dados de foto`);
                     return null;
                 }
                 
+                // USA O INVITE ID COMO USER ID NA CATRACA
+                const userIdForDevice = String(user.inviteId || user.userId);
+                
                 return {
-                    UserID: String(user.userId),
+                    UserID: userIdForDevice,
                     PhotoData: [user.photoBase64]
                 };
             }).filter(face => face !== null);
