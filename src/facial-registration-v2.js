@@ -1,5 +1,5 @@
 const CacheManager = require('./modules/cache-manager');
-const ImageProcessor = require('./modules/iomage-processor');
+const ImageProcessor = require('./modules/image-processor');
 const ImageCacheManager = require('./modules/image-cache-manager');
 const ApiClient = require('./modules/api-client');
 const UserManager = require('./modules/user-manager');
