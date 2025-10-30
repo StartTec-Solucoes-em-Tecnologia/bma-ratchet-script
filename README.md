@@ -207,8 +207,9 @@ Para mais detalhes sobre os testes, consulte `docs/TEST-README.md`.
 - **Documentação dos Testes**: `docs/TEST-README.md`
 - **Registro de Usuários**: `docs/USER-REGISTRATION.md`
 - **Registro de Faces v2.0 (Completo)**: `docs/FACIAL-REGISTRATION-V2.md` ⭐ **Recomendado**
-- **Sistema de Cache de Imagens**: `docs/IMAGE-CACHE-SYSTEM.md` ⭐ **NOVO**
-- **Servidor de Checkin Intelbras**: `docs/CHECKIN-SERVER.md` ⭐ **NOVO**
+- **Cadastro Incremental (Apenas Novos)**: `docs/INCREMENTAL-REGISTRATION.md` 🆕 **Otimizado**
+- **Sistema de Cache de Imagens**: `docs/IMAGE-CACHE-SYSTEM.md`
+- **Servidor de Checkin Intelbras**: `docs/CHECKIN-SERVER.md`
 - **Registro de Faces v1.0**: `docs/FACIAL-REGISTRATION.md`
 
 ## 🔧 Scripts Disponíveis
