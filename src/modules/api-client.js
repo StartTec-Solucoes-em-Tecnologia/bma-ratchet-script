@@ -180,7 +180,8 @@ class ApiClient {
             const url = `http://${deviceIp}/cgi-bin/AccessUser.cgi?action=insertMulti`;
 
             console.log(`   🔗 URL: ${url}`);
-            console.log(`   📝 Enviando ${userList.length} usuários no lote`);
+            console.log(`   📝 Enviando ${userList.length} usuários DE UMA VEZ no lote`);
+            console.log(`   👥 Usuários: ${userList.map(u => u.UserName).join(', ')}`);
 
             const response = await axiosDigest.request({
                 method: 'POST',
