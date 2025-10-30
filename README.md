@@ -216,8 +216,10 @@ Para mais detalhes sobre os testes, consulte `docs/TEST-README.md`.
 ### Produção
 - `npm start` - Configuração de catracas (modo padrão)
 - `npm run register-users` - Registro de usuários em catracas
-- `npm run register-faces` - Registro de faces biométricas em leitoras faciais
-- `npm run checkin-server` - Servidor de checkin Intelbras **[NOVO]**
+- `npm run register-faces-v2` - Registro facial completo (paralelo) ⭐ **Recomendado**
+- `npm run register-faces-individual` - Registro facial completo (sequencial)
+- `npm run register-faces-incremental` - Cadastro apenas de novos usuários 🆕
+- `npm run checkin-server` - Servidor de checkin Intelbras
 
 ### Desenvolvimento
 - `npm run checkin-server:dev` - Servidor de checkin com auto-reload **[NOVO]**
