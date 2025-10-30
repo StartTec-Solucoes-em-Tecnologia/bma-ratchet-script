@@ -88,7 +88,7 @@ class DeviceWorker {
             const totalBatches = Math.ceil(users.length / BATCH_SIZE);
             
             console.log(`\n   ═══════════════════════════════════════════`);
-            console.log(`   📋 FASE 1: CADASTRO DE USUÁRIOS`);
+            console.log(`   📋 FASE 1: CADASTRO DE TODOS OS USUÁRIOS`);
             console.log(`   📦 ${users.length} usuários em ${totalBatches} lote(s) de até ${BATCH_SIZE}`);
             console.log(`   ═══════════════════════════════════════════\n`);
 
@@ -109,54 +109,38 @@ class DeviceWorker {
             }
             
             console.log(`   ✅ FASE 1 CONCLUÍDA: ${stats.usersRegistered} usuários cadastrados\n`);
+            console.log(`   ⏸️  Aguardando antes de iniciar cadastro de faces...\n`);
             
-            // ========================================
-            // VERIFICAÇÃO: CONFIRMAR USUÁRIOS CADASTRADOS
-            // ========================================
-            console.log(`   🔍 Verificando usuários cadastrados no dispositivo...`);
-            const verifyUsers = await this.apiClient.fetchExistingUsers(deviceIp);
-            const verifyUserIds = new Set(verifyUsers.map(u => u.userId));
-            const usersNotFound = users.filter(u => !verifyUserIds.has(u.userId));
-            
-            if (usersNotFound.length > 0) {
-                console.warn(`   ⚠️  ${usersNotFound.length} usuários não encontrados após cadastro:`);
-                usersNotFound.forEach(u => console.warn(`     - ${u.formattedName || u.name}`));
-            }
-            
-            const usersToRegisterFace = users.filter(u => verifyUserIds.has(u.userId));
-            console.log(`   ✅ ${usersToRegisterFace.length}/${users.length} usuários confirmados no dispositivo\n`);
+            // Aguarda 3 segundos para garantir que todos os usuários foram processados
+            await new Promise(resolve => setTimeout(resolve, 3000));
 
             // ========================================
             // FASE 2: CADASTRAR TODAS AS FACES EM LOTES DE 10
             // ========================================
-            if (usersToRegisterFace.length === 0) {
-                console.warn(`   ⚠️  Nenhum usuário encontrado para cadastro de faces`);
-            } else {
-                const faceBatches = Math.ceil(usersToRegisterFace.length / BATCH_SIZE);
+            const faceBatches = Math.ceil(users.length / BATCH_SIZE);
+            
+            console.log(`   ═══════════════════════════════════════════`);
+            console.log(`   📋 FASE 2: CADASTRO DE TODAS AS FACES`);
+            console.log(`   🎭 ${users.length} faces em ${faceBatches} lote(s) de até ${BATCH_SIZE}`);
+            console.log(`   ═══════════════════════════════════════════\n`);
+
+            for (let batchIndex = 0; batchIndex < faceBatches; batchIndex++) {
+                const start = batchIndex * BATCH_SIZE;
+                const end = Math.min(start + BATCH_SIZE, users.length);
+                const batch = users.slice(start, end);
                 
-                console.log(`   ═══════════════════════════════════════════`);
-                console.log(`   📋 FASE 2: CADASTRO DE FACES`);
-                console.log(`   🎭 ${usersToRegisterFace.length} faces em ${faceBatches} lote(s) de até ${BATCH_SIZE}`);
-                console.log(`   ═══════════════════════════════════════════\n`);
+                console.log(`   🎭 Lote ${batchIndex + 1}/${faceBatches} (${batch.length} faces)`);
 
-                for (let batchIndex = 0; batchIndex < faceBatches; batchIndex++) {
-                    const start = batchIndex * BATCH_SIZE;
-                    const end = Math.min(start + BATCH_SIZE, usersToRegisterFace.length);
-                    const batch = usersToRegisterFace.slice(start, end);
-                    
-                    console.log(`   🎭 Lote ${batchIndex + 1}/${faceBatches} (${batch.length} faces)`);
-
-                    // Cadastrar faces do lote
-                    const faceRegResult = await this.apiClient.registerFaces(deviceIp, batch);
-                    if (!faceRegResult.success) {
-                        console.warn(`   ⚠️  Algumas faces falharam no cadastro`);
-                    }
-                    stats.facesRegistered += faceRegResult.successCount || 0;
-                    console.log(`   ✅ ${faceRegResult.successCount || 0} faces cadastradas\n`);
+                // Cadastrar faces do lote
+                const faceRegResult = await this.apiClient.registerFaces(deviceIp, batch);
+                if (!faceRegResult.success) {
+                    console.warn(`   ⚠️  Algumas faces falharam no cadastro`);
                 }
-                
-                console.log(`   ✅ FASE 2 CONCLUÍDA: ${stats.facesRegistered} faces cadastradas\n`);
+                stats.facesRegistered += faceRegResult.successCount || 0;
+                console.log(`   ✅ ${faceRegResult.successCount || 0} faces cadastradas\n`);
             }
+            
+            console.log(`   ✅ FASE 2 CONCLUÍDA: ${stats.facesRegistered} faces cadastradas\n`);
 
             // 6. Salvar no cache
             console.log(`   💾 Salvando no cache...`);
