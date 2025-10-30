@@ -146,78 +146,100 @@ class ApiClient {
     }
 
     /**
-     * Cadastra usuários individualmente com multithread
+     * Cadastra múltiplos usuários de uma vez (batch)
      */
     async registerUsers(deviceIp, userBatch) {
-        console.log(`   📤 Cadastrando ${userBatch.length} usuários individualmente em ${deviceIp}...`);
-        
-        const results = {
-            success: 0,
-            failed: 0,
-            errors: []
-        };
-
-        // Processa em lotes de 3 usuários simultâneos para não sobrecarregar
-        const batchSize = 3;
-        const batches = [];
-        for (let i = 0; i < userBatch.length; i += batchSize) {
-            batches.push(userBatch.slice(i, i + batchSize));
-        }
-
-        for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
-            const batch = batches[batchIndex];
-            console.log(`   🔄 Processando lote ${batchIndex + 1}/${batches.length} (${batch.length} usuários)...`);
-
-            // Processa usuários em paralelo
-            const promises = batch.map(async (user, userIndex) => {
-                const globalIndex = batchIndex * batchSize + userIndex + 1;
-                console.log(`     👤 ${globalIndex}/${userBatch.length} - ${user.formattedName || user.name}...`);
-                
-                const result = await this.registerSingleUser(deviceIp, user);
-                
-                if (result.success) {
-                    results.success++;
-                    console.log(`     ✅ ${globalIndex}/${userBatch.length} - ${result.userName} cadastrado`);
-                } else {
-                    results.failed++;
-                    results.errors.push({
-                        userId: result.userId,
-                        error: result.error
-                    });
-                    console.log(`     ❌ ${globalIndex}/${userBatch.length} - ${user.formattedName || user.name} falhou`);
-                }
-                
-                // Pequena pausa entre usuários para não sobrecarregar
-                await new Promise(resolve => setTimeout(resolve, 200));
-                
-                return result;
-            });
-
-            // Aguarda todos os usuários do lote
-            await Promise.all(promises);
+        try {
+            const axiosDigest = this.createDigestAuth();
             
-            // Pausa entre lotes
-            if (batchIndex < batches.length - 1) {
-                console.log(`   ⏳ Pausa entre lotes (1s)...`);
-                await new Promise(resolve => setTimeout(resolve, 1000));
-            }
-        }
-
-        console.log(`   📊 Resultado: ${results.success} sucessos, ${results.failed} falhas`);
-        
-        if (results.errors.length > 0) {
-            console.log(`   ❌ Erros encontrados:`);
-            results.errors.forEach(error => {
-                console.log(`     - UserID ${error.userId}: ${error.error}`);
+            console.log(`   📤 Cadastrando ${userBatch.length} usuários em lote em ${deviceIp}...`);
+            
+            // Prepara lista de usuários para o batch
+            const userList = userBatch.map(user => {
+                const userName = user.formattedName || user.name || 'Usuario';
+                const cleanUserName = userName.substring(0, 50).replace(/[^\w\s]/g, '').trim();
+                const userId = String(user.userId || Date.now());
+                
+                return {
+                    UserID: userId,
+                    UserName: cleanUserName,
+                    UserType: 0, // General user
+                    Authority: 2, // Usuário normal
+                    Password: "123456",
+                    Doors: [0],
+                    TimeSections: [255],
+                    ValidFrom: "2024-01-01 00:00:00",
+                    ValidTo: "2037-12-31 23:59:59"
+                };
             });
-        }
 
-        return { 
-            success: results.failed === 0, 
-            successCount: results.success,
-            failedCount: results.failed,
-            errors: results.errors
-        };
+            const payload = {
+                UserList: userList
+            };
+
+            const url = `http://${deviceIp}/cgi-bin/AccessUser.cgi?action=insertMulti`;
+
+            console.log(`   🔗 URL: ${url}`);
+            console.log(`   📝 Enviando ${userList.length} usuários no lote`);
+
+            const response = await axiosDigest.request({
+                method: 'POST',
+                url,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'BMA-Facial-Registration/2.0.0'
+                },
+                data: JSON.stringify(payload),
+                timeout: 60000 // Aumentado para 60s para lotes maiores
+            });
+
+            const responseText = response.data.trim();
+            const isSuccess = responseText === 'OK';
+            
+            if (!isSuccess) {
+                console.warn(`   ⚠️  Resposta inesperada: "${responseText}"`);
+            } else {
+                console.log(`   ✅ Lote cadastrado com sucesso`);
+            }
+
+            return { 
+                success: isSuccess, 
+                response: responseText,
+                successCount: isSuccess ? userBatch.length : 0,
+                failedCount: isSuccess ? 0 : userBatch.length,
+                errors: []
+            };
+        } catch (error) {
+            let errorDetails = error.message;
+            
+            if (error.response) {
+                const status = error.response.status;
+                const statusText = error.response.statusText;
+                const responseData = error.response.data;
+                
+                // Decodifica erro se disponível
+                if (responseData && responseData.detail && responseData.detail.FailCodes) {
+                    const failCodes = responseData.detail.FailCodes;
+                    console.error(`   ❌ Códigos de erro: ${failCodes.join(', ')}`);
+                    failCodes.forEach(code => {
+                        const decodedError = this.decodeErrorCode(code);
+                        console.error(`     - ${decodedError}`);
+                    });
+                    errorDetails = `HTTP ${status}: Batch falhou - ${JSON.stringify(responseData)}`;
+                } else {
+                    errorDetails = `HTTP ${status}: ${statusText} - ${JSON.stringify(responseData)}`;
+                }
+            }
+            
+            console.error(`   ❌ Erro ao cadastrar lote em ${deviceIp}:`, errorDetails);
+            return { 
+                success: false, 
+                error: errorDetails,
+                successCount: 0,
+                failedCount: userBatch.length,
+                errors: [{ batch: 'all', error: errorDetails }]
+            };
+        }
     }
 
     /**
@@ -310,78 +332,105 @@ class ApiClient {
     }
 
     /**
-     * Cadastra faces individualmente com multithread
+     * Cadastra múltiplas faces de uma vez (batch)
      */
     async registerFaces(deviceIp, userBatch) {
-        console.log(`   🎭 Cadastrando ${userBatch.length} faces individualmente em ${deviceIp}...`);
-        
-        const results = {
-            success: 0,
-            failed: 0,
-            errors: []
-        };
-
-        // Processa em lotes de 2 faces simultâneas (mais pesado que usuários)
-        const batchSize = 2;
-        const batches = [];
-        for (let i = 0; i < userBatch.length; i += batchSize) {
-            batches.push(userBatch.slice(i, i + batchSize));
-        }
-
-        for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
-            const batch = batches[batchIndex];
-            console.log(`   🔄 Processando lote ${batchIndex + 1}/${batches.length} (${batch.length} faces)...`);
-
-            // Processa faces em paralelo
-            const promises = batch.map(async (user, userIndex) => {
-                const globalIndex = batchIndex * batchSize + userIndex + 1;
-                console.log(`     🎭 ${globalIndex}/${userBatch.length} - ${user.formattedName || user.name}...`);
-                
-                const result = await this.registerSingleFace(deviceIp, user);
-                
-                if (result.success) {
-                    results.success++;
-                    console.log(`     ✅ ${globalIndex}/${userBatch.length} - face cadastrada`);
-                } else {
-                    results.failed++;
-                    results.errors.push({
-                        userId: result.userId,
-                        error: result.error
-                    });
-                    console.log(`     ❌ ${globalIndex}/${userBatch.length} - face falhou`);
+        try {
+            const axiosDigest = this.createDigestAuth();
+            
+            console.log(`   🎭 Cadastrando ${userBatch.length} faces em lote em ${deviceIp}...`);
+            
+            // Prepara lista de faces para o batch
+            const faceList = userBatch.map(user => {
+                if (!user.photoBase64) {
+                    console.warn(`   ⚠️  Usuário ${user.userId} sem dados de foto`);
+                    return null;
                 }
                 
-                // Pausa maior entre faces (mais pesado)
-                await new Promise(resolve => setTimeout(resolve, 500));
-                
-                return result;
-            });
+                return {
+                    UserID: String(user.userId),
+                    PhotoData: [user.photoBase64]
+                };
+            }).filter(face => face !== null);
 
-            // Aguarda todas as faces do lote
-            await Promise.all(promises);
-            
-            // Pausa entre lotes
-            if (batchIndex < batches.length - 1) {
-                console.log(`   ⏳ Pausa entre lotes (2s)...`);
-                await new Promise(resolve => setTimeout(resolve, 2000));
+            if (faceList.length === 0) {
+                console.warn(`   ⚠️  Nenhuma face válida para cadastrar`);
+                return {
+                    success: false,
+                    error: 'Nenhuma face válida',
+                    successCount: 0,
+                    failedCount: userBatch.length,
+                    errors: []
+                };
             }
-        }
 
-        console.log(`   📊 Resultado: ${results.success} sucessos, ${results.failed} falhas`);
-        
-        if (results.errors.length > 0) {
-            console.log(`   ❌ Erros encontrados:`);
-            results.errors.forEach(error => {
-                console.log(`     - UserID ${error.userId}: ${error.error}`);
+            const payload = {
+                FaceList: faceList
+            };
+
+            const url = `http://${deviceIp}/cgi-bin/AccessFace.cgi?action=insertMulti`;
+
+            console.log(`   🔗 URL: ${url}`);
+            console.log(`   📝 Enviando ${faceList.length} faces no lote`);
+
+            const response = await axiosDigest.request({
+                method: 'POST',
+                url,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'BMA-Facial-Registration/2.0.0'
+                },
+                data: JSON.stringify(payload),
+                timeout: 90000 // Aumentado para 90s (faces são mais pesadas)
             });
-        }
 
-        return { 
-            success: results.failed === 0, 
-            successCount: results.success,
-            failedCount: results.failed,
-            errors: results.errors
-        };
+            const responseText = response.data.trim();
+            const isSuccess = responseText === 'OK';
+            
+            if (!isSuccess) {
+                console.warn(`   ⚠️  Resposta inesperada: "${responseText}"`);
+            } else {
+                console.log(`   ✅ Lote de faces cadastrado com sucesso`);
+            }
+
+            return { 
+                success: isSuccess, 
+                response: responseText,
+                successCount: isSuccess ? faceList.length : 0,
+                failedCount: isSuccess ? 0 : faceList.length,
+                errors: []
+            };
+        } catch (error) {
+            let errorDetails = error.message;
+            
+            if (error.response) {
+                const status = error.response.status;
+                const statusText = error.response.statusText;
+                const responseData = error.response.data;
+                
+                // Decodifica erro se disponível
+                if (responseData && responseData.detail && responseData.detail.FailCodes) {
+                    const failCodes = responseData.detail.FailCodes;
+                    console.error(`   ❌ Códigos de erro: ${failCodes.join(', ')}`);
+                    failCodes.forEach(code => {
+                        const decodedError = this.decodeErrorCode(code);
+                        console.error(`     - ${decodedError}`);
+                    });
+                    errorDetails = `HTTP ${status}: Batch de faces falhou - ${JSON.stringify(responseData)}`;
+                } else {
+                    errorDetails = `HTTP ${status}: ${statusText} - ${JSON.stringify(responseData)}`;
+                }
+            }
+            
+            console.error(`   ❌ Erro ao cadastrar lote de faces em ${deviceIp}:`, errorDetails);
+            return { 
+                success: false, 
+                error: errorDetails,
+                successCount: 0,
+                failedCount: userBatch.length,
+                errors: [{ batch: 'all', error: errorDetails }]
+            };
+        }
     }
 
     /**
