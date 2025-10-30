@@ -1,5 +1,5 @@
 const CacheManager = require('./modules/cache-manager');
-const ImageProcessor = require('./modules/image-processor');
+const ImageProcessor = require('./modules/iomage-processor');
 const ImageCacheManager = require('./modules/image-cache-manager');
 const ApiClient = require('./modules/api-client');
 const UserManager = require('./modules/user-manager');
@@ -128,13 +128,21 @@ class FacialRegistrationService {
                 
                 // Processa resultados individuais
                 for (const result of batchResult.results) {
+                    // Garante que stats existe
+                    const stats = result.data?.stats || {
+                        usersVerified: 0,
+                        usersDeleted: 0,
+                        usersRegistered: 0,
+                        facesRegistered: 0,
+                        redisSaves: 0
+                    };
+
                     if (result.success && result.data) {
-                        const stats = result.data.stats;
-                        globalStats.usersVerified += stats.usersVerified;
-                        globalStats.usersDeleted += stats.usersDeleted;
-                        globalStats.usersRegistered += stats.usersRegistered;
-                        globalStats.facesRegistered += stats.facesRegistered;
-                        globalStats.redisSaves += stats.redisSaves;
+                        globalStats.usersVerified += stats.usersVerified || 0;
+                        globalStats.usersDeleted += stats.usersDeleted || 0;
+                        globalStats.usersRegistered += stats.usersRegistered || 0;
+                        globalStats.facesRegistered += stats.facesRegistered || 0;
+                        globalStats.redisSaves += stats.redisSaves || 0;
                     }
 
                     results.push({
@@ -142,7 +150,7 @@ class FacialRegistrationService {
                         batchIndex: batchIndex + 1,
                         success: result.success,
                         error: result.error,
-                        stats: result.data?.stats || {}
+                        stats: stats
                     });
 
                     console.log(`\n📊 Resultado da leitora ${result.deviceIp}:`);
@@ -151,12 +159,11 @@ class FacialRegistrationService {
                         console.log(`   ❌ Erro: ${result.error}`);
                     }
                     if (result.data?.stats) {
-                        const stats = result.data.stats;
-                        console.log(`   👀 Usuários verificados: ${stats.usersVerified}`);
-                        console.log(`   🗑️  Usuários deletados: ${stats.usersDeleted}`);
-                        console.log(`   👤 Usuários cadastrados: ${stats.usersRegistered}`);
-                        console.log(`   🎭 Faces cadastradas: ${stats.facesRegistered}`);
-                        console.log(`   💾 Saves no Redis: ${stats.redisSaves}`);
+                        console.log(`   👀 Usuários verificados: ${stats.usersVerified || 0}`);
+                        console.log(`   🗑️  Usuários deletados: ${stats.usersDeleted || 0}`);
+                        console.log(`   👤 Usuários cadastrados: ${stats.usersRegistered || 0}`);
+                        console.log(`   🎭 Faces cadastradas: ${stats.facesRegistered || 0}`);
+                        console.log(`   💾 Saves no Redis: ${stats.redisSaves || 0}`);
                     }
                 }
             }

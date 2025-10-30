@@ -106,19 +106,13 @@ class DeviceWorker {
                 }
                 stats.usersRegistered += userRegResult.successCount || 0;
                 console.log(`   ✅ ${userRegResult.successCount || 0} usuários cadastrados\n`);
-                
-                // Pausa entre lotes (exceto no último)
-                if (batchIndex < totalBatches - 1) {
-                    console.log(`   ⏳ Pausa entre lotes (2s)...`);
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                }
             }
             
             console.log(`   ✅ FASE 1 CONCLUÍDA: ${stats.usersRegistered} usuários cadastrados\n`);
 
-            // Aguardar estabilização geral após todos os usuários
-            console.log(`   ⏳ Aguardando estabilização geral (10s)...`);
-            await new Promise(resolve => setTimeout(resolve, 10000));
+            // Aguardar estabilização após todos os usuários
+            console.log(`   ⏳ Aguardando estabilização (5s)...`);
+            await new Promise(resolve => setTimeout(resolve, 5000));
             
             // ========================================
             // VERIFICAÇÃO: CONFIRMAR USUÁRIOS CADASTRADOS
@@ -163,12 +157,6 @@ class DeviceWorker {
                     }
                     stats.facesRegistered += faceRegResult.successCount || 0;
                     console.log(`   ✅ ${faceRegResult.successCount || 0} faces cadastradas\n`);
-                    
-                    // Pausa entre lotes (exceto no último)
-                    if (batchIndex < faceBatches - 1) {
-                        console.log(`   ⏳ Pausa entre lotes (2s)...`);
-                        await new Promise(resolve => setTimeout(resolve, 2000));
-                    }
                 }
                 
                 console.log(`   ✅ FASE 2 CONCLUÍDA: ${stats.facesRegistered} faces cadastradas\n`);
@@ -207,7 +195,14 @@ class DeviceWorker {
                 success: false,
                 deviceIp,
                 error: error.message,
-                message: 'Processamento falhou'
+                message: 'Processamento falhou',
+                stats: {
+                    usersVerified: 0,
+                    usersDeleted: 0,
+                    usersRegistered: 0,
+                    facesRegistered: 0,
+                    redisSaves: 0
+                }
             };
         }
     }
