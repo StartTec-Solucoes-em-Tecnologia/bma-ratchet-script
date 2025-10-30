@@ -109,15 +109,11 @@ class DeviceWorker {
             }
             
             console.log(`   ✅ FASE 1 CONCLUÍDA: ${stats.usersRegistered} usuários cadastrados\n`);
-
-            // Aguardar estabilização após todos os usuários
-            console.log(`   ⏳ Aguardando estabilização (5s)...`);
-            await new Promise(resolve => setTimeout(resolve, 5000));
             
             // ========================================
             // VERIFICAÇÃO: CONFIRMAR USUÁRIOS CADASTRADOS
             // ========================================
-            console.log(`\n   🔍 Verificando usuários cadastrados no dispositivo...`);
+            console.log(`   🔍 Verificando usuários cadastrados no dispositivo...`);
             const verifyUsers = await this.apiClient.fetchExistingUsers(deviceIp);
             const verifyUserIds = new Set(verifyUsers.map(u => u.userId));
             const usersNotFound = users.filter(u => !verifyUserIds.has(u.userId));
