@@ -43,35 +43,39 @@ class UserManager {
                 throw new Error('EVENT_ID não está definido nas variáveis de ambiente');
             }
 
-            // Busca TODOS os participants com facial_image do evento
-            const participants = await this.prisma.participant.findMany({
+            console.log(`🔍 Buscando no evento: ${eventId}\n`);
+
+            // Busca participants através da tabela de relacionamento participant_to_event
+            const participantToEvents = await this.prisma.participant_to_event.findMany({
                 where: {
-                    invite: {
-                        some: {
-                            event_id: eventId
-                        }
-                    },
-                    facial_image: {
-                        not: null
-                    }
+                    event_id: eventId
                 },
                 include: {
-                    invite: {
-                        where: {
-                            event_id: eventId
+                    participant: {
+                        include: {
+                            invite: {
+                                where: {
+                                    event_id: eventId,
+                                    type: 'PARTICIPANT'
+                                }
+                            }
                         }
                     }
                 }
             });
 
-            // Busca TODOS os guests com facial_image do evento
+            // Filtra apenas participants com facial_image
+            const participants = participantToEvents
+                .filter(pte => pte.participant?.facial_image)
+                .map(pte => ({
+                    ...pte.participant,
+                    invite: pte.participant.invite
+                }));
+
+            // Busca guests diretamente pelo event_id
             const guests = await this.prisma.guest.findMany({
                 where: {
-                    invite: {
-                        some: {
-                            event_id: eventId
-                        }
-                    },
+                    event_id: eventId,
                     facial_image: {
                         not: null
                     }
@@ -79,16 +83,46 @@ class UserManager {
                 include: {
                     invite: {
                         where: {
-                            event_id: eventId
+                            event_id: eventId,
+                            type: 'GUEST'
                         }
                     }
                 }
             });
 
             console.log(`📊 Busca no banco de dados:`);
-            console.log(`   👥 ${participants.length} participants com facial_image`);
-            console.log(`   👤 ${guests.length} guests com facial_image`);
+            console.log(`   👥 ${participants.length} participants com facial_image NO EVENTO`);
+            console.log(`   👤 ${guests.length} guests com facial_image NO EVENTO`);
             console.log(`   🎯 Total: ${participants.length + guests.length} registros`);
+
+            // Debug: Busca totais SEM filtro de evento
+            const allParticipantToEvents = await this.prisma.participant_to_event.findMany({
+                include: {
+                    participant: true
+                }
+            });
+
+            const allParticipantsWithFacial = allParticipantToEvents.filter(
+                pte => pte.participant?.facial_image
+            ).length;
+
+            const allGuestsWithFacial = await this.prisma.guest.count({
+                where: {
+                    facial_image: {
+                        not: null
+                    }
+                }
+            });
+
+            console.log(`\n   🌐 Total NO BANCO (todos os eventos):`);
+            console.log(`   👥 ${allParticipantsWithFacial} participants com facial_image`);
+            console.log(`   👤 ${allGuestsWithFacial} guests com facial_image`);
+            console.log(`   🎯 Total geral: ${allParticipantsWithFacial + allGuestsWithFacial}`);
+
+            if (participants.length + guests.length < allParticipantsWithFacial + allGuestsWithFacial) {
+                const diff = (allParticipantsWithFacial + allGuestsWithFacial) - (participants.length + guests.length);
+                console.log(`\n   ⚠️  ${diff} pessoas com facial estão em OUTROS EVENTOS`);;
+            }
 
             // Processa participants e guests em um único Map
             const usersByPersonId = new Map();    // Deduplica por userId (pessoa física)
