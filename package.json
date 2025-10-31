@@ -18,7 +18,7 @@
     "images:cleanup": "node src/image-cache-viewer.js cleanup",
     "images:clear": "node src/image-cache-viewer.js clear",
     "images:check": "node src/image-cache-viewer.js check",
-    "test:faces": "node test/test-facial-registration.js"
+    "cron:faces": "node src/facial-registration-cron.js"
   },
   "dependencies": {
     "@mhoc/axios-digest-auth": "^0.8.0",
@@ -30,6 +30,8 @@
     "http": "0.0.1-security",
     "http-auth": "^4.2.1",
     "ioredis": "^5.8.2",
+    "node-cron": "^3.0.3",
+    "piscina": "^3.2.0",
     "redis": "^5.8.3",
     "sharp": "^0.34.4"
   },

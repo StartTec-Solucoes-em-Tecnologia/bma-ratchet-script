@@ -62,3 +62,7 @@ ehthumbs.db
 Thumbs.db
 
 /src/generated/prisma
+
+# Lock files
+.facial-registration.lock
+temp/
