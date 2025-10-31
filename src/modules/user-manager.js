@@ -19,12 +19,12 @@ class UserManager {
         try {
             const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
             this.redisClient = redis.createClient({ url: redisUrl });
-            
+
             this.redisClient.on('error', (err) => console.error('❌ Redis Error:', err));
-            
+
             await this.redisClient.connect();
             console.log('✅ Conectado ao Redis\n');
-            
+
             return this.redisClient;
         } catch (error) {
             console.warn('⚠️  Redis não disponível, continuando sem cache:', error.message);
@@ -43,84 +43,72 @@ class UserManager {
                 throw new Error('EVENT_ID não está definido nas variáveis de ambiente');
             }
 
-            // Busca participantes com facial_image
-            const participants = await this.prisma.participant.findMany({
+            // Busca invites do evento com participants e guests
+            const invites = await this.prisma.invite.findMany({
                 where: {
-                    invite: {
-                        some: {
-                            event_id: eventId
-                        }
-                    },
-                    facial_image: {
-                        not: null
-                    }
+                    event_id: eventId
                 },
                 include: {
-                    invite: true
+                    participant: true,
+                    guest: true
                 }
             });
 
-            // Busca convidados com facial_image
-            const guests = await this.prisma.guest.findMany({
-                where: {
-                    invite: {
-                        some: {
-                            event_id: eventId
-                        }
-                    },
-                    facial_image: {
-                        not: null
-                    }
-                },
-                include: {
-                    invite: true
+            console.log(`📊 Encontrados ${invites.length} invites do evento`);
+
+            // Processa cada invite e extrai o melhor usuário (guest > participant)
+            const users = [];
+            let participantsCount = 0;
+            let guestsCount = 0;
+            let skippedCount = 0;
+
+            for (const invite of invites) {
+                let selectedUser = null;
+
+                // Verifica se tem guest com facial_image
+                if (invite.guest && invite.guest.facial_image) {
+                    selectedUser = {
+                        userId: invite.guest.id,
+                        name: invite.guest.name,
+                        email: invite.guest.email,
+                        document: invite.guest.document,
+                        cellphone: invite.guest.cellphone,
+                        facialImageUrl: invite.guest.facial_image,
+                        type: 'guest',
+                        inviteId: invite.id,
+                        priority: 2
+                    };
+                    guestsCount++;
                 }
-            });
-
-            // Converte para formato unificado
-            const allUsers = [
-                ...participants.map(p => ({
-                    userId: p.id,
-                    name: p.name,
-                    email: p.email,
-                    document: p.document,
-                    cellphone: p.cellphone,
-                    facialImageUrl: p.facial_image,
-                    type: 'participant',
-                    inviteId: p.invite[0]?.id, // Pega o primeiro invite
-                    priority: 1 // Prioridade menor para participants
-                })),
-                ...guests.map(g => ({
-                    userId: g.id,
-                    name: g.name,
-                    email: g.email,
-                    document: g.document,
-                    cellphone: g.cellphone,
-                    facialImageUrl: g.facial_image,
-                    type: 'guest',
-                    inviteId: g.invite[0]?.id, // Pega o primeiro invite
-                    priority: 2 // Prioridade maior para guests
-                }))
-            ];
-
-            // Agrupa por inviteId e seleciona o de maior prioridade (guest)
-            const usersByInvite = new Map();
-            
-            allUsers.forEach(user => {
-                const existingUser = usersByInvite.get(user.inviteId);
-                
-                if (!existingUser || user.priority > existingUser.priority) {
-                    usersByInvite.set(user.inviteId, user);
+                // Se não tem guest, verifica participant com facial_image
+                else if (invite.participant && invite.participant.facial_image) {
+                    selectedUser = {
+                        userId: invite.participant.id,
+                        name: invite.participant.name,
+                        email: invite.participant.email,
+                        document: invite.participant.document,
+                        cellphone: invite.participant.cellphone,
+                        facialImageUrl: invite.participant.facial_image,
+                        type: 'participant',
+                        inviteId: invite.id,
+                        priority: 1
+                    };
+                    participantsCount++;
+                } else {
+                    // Invite sem facial_image em nenhum dos dois
+                    skippedCount++;
+                    continue;
                 }
-            });
 
-            // Converte de volta para array
-            const users = Array.from(usersByInvite.values());
+                if (selectedUser) {
+                    users.push(selectedUser);
+                }
+            }
 
-            console.log(`📊 Encontrados ${users.length} usuários únicos por inviteId`);
-            console.log(`   👥 Participantes: ${participants.length}`);
-            console.log(`   👤 Convidados: ${guests.length}`);
-            console.log(`   🎯 Únicos selecionados: ${users.length}`);
+            console.log(`   👥 Participantes selecionados: ${participantsCount}`);
+            console.log(`   👤 Convidados selecionados: ${guestsCount}`);
+            console.log(`   ⏭️  Invites sem facial: ${skippedCount}`);
+            console.log(`   🎯 Total de usuários: ${users.length}`);
             console.log(`   📋 Prioridade: Guest > Participant\n`);
 
             return users;
@@ -137,17 +125,17 @@ class UserManager {
         if (!fullName || typeof fullName !== 'string') {
             return { firstName: 'Usuario', lastName: 'Sem Nome' };
         }
-        
+
         const nameParts = fullName.trim().split(/\s+/);
-        
+
         if (nameParts.length === 1) {
             return { firstName: nameParts[0], lastName: 'Sem Sobrenome' };
         }
-        
+
         // Pega apenas o primeiro nome e último sobrenome
         const firstName = nameParts[0];
         const lastName = nameParts[nameParts.length - 1]; // Último elemento
-        
+
         return { firstName, lastName };
     }
 
@@ -157,10 +145,10 @@ class UserManager {
     formatNameForDevice(fullName) {
         const { firstName, lastName } = this.splitName(fullName);
         const formattedName = `${firstName} ${lastName}`.trim();
-        
+
         // Limita a 50 caracteres conforme especificação da API
-        return formattedName.length > 50 
-            ? formattedName.substring(0, 50) 
+        return formattedName.length > 50
+            ? formattedName.substring(0, 50)
             : formattedName;
     }
 
@@ -171,7 +159,7 @@ class UserManager {
         try {
             let redisSuccess = false;
             let jsonSuccess = false;
-            
+
             // Salva no Redis (usando inviteId como chave se disponível)
             if (this.redisClient) {
                 const key = `device:${deviceIp}:users`;
@@ -179,14 +167,14 @@ class UserManager {
                 await this.redisClient.sAdd(key, value);
                 redisSuccess = true;
             }
-            
+
             // Salva no cache JSON
             if (cacheManager) {
                 jsonSuccess = await cacheManager.addUser(deviceIp, userId, userData);
             }
-            
-            return { 
-                success: redisSuccess || jsonSuccess, 
+
+            return {
+                success: redisSuccess || jsonSuccess,
                 redis: redisSuccess,
                 json: jsonSuccess
             };
@@ -203,21 +191,21 @@ class UserManager {
         try {
             let redisSuccess = false;
             let jsonSuccess = false;
-            
+
             // Remove do Redis
             if (this.redisClient) {
                 const key = `device:${deviceIp}:users`;
                 await this.redisClient.sRem(key, userId);
                 redisSuccess = true;
             }
-            
+
             // Remove do cache JSON
             if (cacheManager) {
                 jsonSuccess = await cacheManager.removeUser(deviceIp, userId);
             }
-            
-            return { 
-                success: redisSuccess || jsonSuccess, 
+
+            return {
+                success: redisSuccess || jsonSuccess,
                 redis: redisSuccess,
                 json: jsonSuccess
             };
