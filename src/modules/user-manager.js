@@ -43,83 +43,108 @@ class UserManager {
                 throw new Error('EVENT_ID não está definido nas variáveis de ambiente');
             }
 
-            // Busca invites do evento com participants e guests
-            const invites = await this.prisma.invite.findMany({
+            // Busca TODOS os participants com facial_image do evento
+            const participants = await this.prisma.participant.findMany({
                 where: {
-                    event_id: eventId
+                    invite: {
+                        some: {
+                            event_id: eventId
+                        }
+                    },
+                    facial_image: {
+                        not: null
+                    }
                 },
                 include: {
-                    participant: true,
-                    guest: true
+                    invite: {
+                        where: {
+                            event_id: eventId
+                        }
+                    }
                 }
             });
 
-            console.log(`📊 Encontrados ${invites.length} invites do evento`);
-
-            // Processa cada invite e extrai guest OU participant
-            const usersMap = new Map(); // Usar Map para garantir unicidade por inviteId
-            let participantsCount = 0;
-            let guestsCount = 0;
-            let skippedCount = 0;
-
-            for (const invite of invites) {
-                // Verifica se já processou este invite
-                if (usersMap.has(invite.id)) {
-                    console.warn(`   ⚠️  Invite duplicado ignorado: ${invite.id}`);
-                    continue;
+            // Busca TODOS os guests com facial_image do evento
+            const guests = await this.prisma.guest.findMany({
+                where: {
+                    invite: {
+                        some: {
+                            event_id: eventId
+                        }
+                    },
+                    facial_image: {
+                        not: null
+                    }
+                },
+                include: {
+                    invite: {
+                        where: {
+                            event_id: eventId
+                        }
+                    }
                 }
+            });
 
-                let selectedPerson = null;
-                let personType = null;
+            console.log(`📊 Busca no banco de dados:`);
+            console.log(`   👥 ${participants.length} participants com facial_image`);
+            console.log(`   👤 ${guests.length} guests com facial_image`);
+            console.log(`   🎯 Total: ${participants.length + guests.length} registros`);
 
-                // Prioridade 1: Guest (se existir)
-                if (invite.guest) {
-                    selectedPerson = invite.guest;
-                    personType = 'guest';
-                    guestsCount++;
-                }
-                // Prioridade 2: Participant (se não tiver guest)
-                else if (invite.participant) {
-                    selectedPerson = invite.participant;
-                    personType = 'participant';
-                    participantsCount++;
-                }
+            // Processa participants e guests em um único Map
+            const usersByPersonId = new Map();    // Deduplica por userId (pessoa física)
+            let imageUpdates = 0;
+            let duplicatedPeople = 0;
 
-                // Se não tem nem guest nem participant, pula
-                if (!selectedPerson) {
-                    skippedCount++;
-                    continue;
-                }
+            // 1. Processa TODOS os participants
+            for (const participant of participants) {
+                const personId = `participant_${participant.id}`;
+                const inviteId = participant.invite[0]?.id || 'no-invite';
 
-                // Monta o objeto do usuário
                 const user = {
-                    inviteId: invite.id,                    // ID do invite (chave principal)
-                    userId: selectedPerson.id,              // ID do guest ou participant
-                    name: selectedPerson.name,
-                    email: selectedPerson.email,
-                    document: selectedPerson.document,
-                    cellphone: selectedPerson.cellphone,
-                    facialImageUrl: selectedPerson.facial_image,
-                    type: personType,
-                    priority: personType === 'guest' ? 2 : 1
+                    inviteId: inviteId,
+                    userId: participant.id,
+                    personKey: personId,  // Chave única para deduplica
+                    name: participant.name,
+                    email: participant.email,
+                    document: participant.document,
+                    cellphone: participant.cellphone,
+                    facialImageUrl: participant.facial_image,
+                    type: 'participant',
+                    priority: 1
                 };
 
-                // Só adiciona se tiver facial_image
-                if (user.facialImageUrl) {
-                    usersMap.set(invite.id, user);
-                } else {
-                    skippedCount++;
-                }
+                usersByPersonId.set(personId, user);
+            }
+
+            // 2. Processa TODOS os guests
+            for (const guest of guests) {
+                const personId = `guest_${guest.id}`;
+                const inviteId = guest.invite[0]?.id || 'no-invite';
+
+                const user = {
+                    inviteId: inviteId,
+                    userId: guest.id,
+                    personKey: personId,  // Chave única para deduplica
+                    name: guest.name,
+                    email: guest.email,
+                    document: guest.document,
+                    cellphone: guest.cellphone,
+                    facialImageUrl: guest.facial_image,
+                    type: 'guest',
+                    priority: 2
+                };
+
+                usersByPersonId.set(personId, user);
             }
 
             // Converte Map para Array
-            const users = Array.from(usersMap.values());
+            const users = Array.from(usersByPersonId.values());
 
-            console.log(`   👥 Participantes: ${participantsCount}`);
-            console.log(`   👤 Convidados: ${guestsCount}`);
-            console.log(`   ⏭️  Sem facial_image: ${skippedCount}`);
-            console.log(`   🎯 Total de usuários com facial: ${users.length}`);
-            console.log(`   📋 Regra: Guest > Participant (1 por invite)\n`);
+            console.log(`\n   📊 Resumo do Processamento:`);
+            console.log(`   👥 ${participants.length} participants adicionados`);
+            console.log(`   👤 ${guests.length} guests adicionados`);
+            console.log(`   🎯 Total de PESSOAS ÚNICAS: ${users.length}`);
+            console.log(`   📋 Regra: TODOS participants + TODOS guests com facial_image\n`);
 
             return users;
         } catch (error) {
