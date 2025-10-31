@@ -14,6 +14,7 @@ const ApiClient = require('./modules/api-client');
 const UserManager = require('./modules/user-manager');
 const ImageProcessor = require('./modules/image-processor');
 const CacheManager = require('./modules/cache-manager');
+const ImageCacheManager = require('./modules/image-cache-manager');
 
 class IncrementalFacialRegistration {
     constructor() {
@@ -21,15 +22,14 @@ class IncrementalFacialRegistration {
         this.userManager = new UserManager();
         this.imageProcessor = new ImageProcessor();
         this.cacheManager = new CacheManager();
+        this.imageCacheManager = new ImageCacheManager();
     }
 
     async init() {
         try {
-            console.log('🔌 Conectando ao banco de dados...');
-            await this.userManager.connect();
-            
             console.log('💾 Inicializando cache...');
             await this.cacheManager.init();
+            await this.imageCacheManager.init();
             
             console.log('✅ Inicialização concluída!\n');
         } catch (error) {
@@ -40,7 +40,9 @@ class IncrementalFacialRegistration {
 
     async cleanup() {
         try {
-            await this.userManager.disconnect();
+            if (this.userManager.prisma) {
+                await this.userManager.prisma.$disconnect();
+            }
             console.log('✅ Conexões fechadas');
         } catch (error) {
             console.error('❌ Erro ao fechar conexões:', error.message);
@@ -216,25 +218,32 @@ class IncrementalFacialRegistration {
                 return;
             }
 
-            // 2. Processar imagens
-            console.log('🖼️  Processando imagens...');
-            const usersWithImages = [];
+            // 2. Baixar e processar imagens
+            console.log('📥 Baixando imagens...\n');
+            const downloadResults = await this.imageCacheManager.downloadAllImages(allUsers, false);
             
-            for (const user of allUsers) {
-                try {
-                    const photoBase64 = await this.imageProcessor.processUserImage(user);
-                    if (photoBase64) {
-                        usersWithImages.push({
-                            ...user,
-                            photoBase64
-                        });
-                    }
-                } catch (error) {
-                    console.error(`⚠️  Erro ao processar ${user.name}: ${error.message}`);
-                }
+            if (downloadResults.users.length === 0) {
+                throw new Error('Nenhuma imagem foi baixada com sucesso');
             }
             
-            console.log(`✅ ${usersWithImages.length} imagens processadas\n`);
+            console.log('\n📸 Processando imagens para base64...\n');
+            const { processedUsers, processedCount, errorCount } = await this.imageProcessor.processBatch(downloadResults.users);
+            
+            console.log(`\n📊 Processamento de imagens concluído:`);
+            console.log(`   ✅ Sucesso: ${processedCount}`);
+            console.log(`   ❌ Erros: ${errorCount}\n`);
+            
+            if (processedUsers.length === 0) {
+                throw new Error('Nenhuma imagem foi processada com sucesso');
+            }
+            
+            // 3. Formatar nomes
+            console.log('📝 Formatando nomes para dispositivos...');
+            const usersWithImages = processedUsers.map(user => ({
+                ...user,
+                formattedName: this.userManager.formatNameForDevice(user.name)
+            }));
+            console.log(`   ✅ ${usersWithImages.length} nomes formatados\n`);
 
             // 3. Processar cada dispositivo
             const globalStats = {
