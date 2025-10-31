@@ -61,7 +61,8 @@ class IncrementalFacialRegistration {
         
         // Filtra apenas usuários que NÃO têm face
         const usersToRegister = allUsers.filter(user => {
-            const userIdForDevice = String(user.inviteId || user.userId);
+            // user.userId já contém inviteId || participant.id || guest.id
+            const userIdForDevice = String(user.userId);
             return !existingFaces.has(userIdForDevice);
         });
         
@@ -107,6 +108,7 @@ class IncrementalFacialRegistration {
             const batch = usersToRegister.slice(start, end);
             
             console.log(`   📦 Lote ${i + 1}/${userBatches} (${batch.length} usuários)`);
+            console.log(`   👥 UserIDs: ${batch.map(u => u.userId).slice(0, 5).join(', ')}...`);
 
             try {
                 const result = await this.apiClient.registerUsers(deviceIp, batch);
@@ -158,9 +160,10 @@ class IncrementalFacialRegistration {
         console.log(`   💾 Salvando no cache...`);
         for (const user of usersToRegister) {
             try {
+                // user.userId já contém inviteId || participant.id || guest.id
                 await this.userManager.saveUser(
                     deviceIp, 
-                    user.inviteId || user.userId, 
+                    user.userId, 
                     {
                         name: user.name,
                         email: user.email,
