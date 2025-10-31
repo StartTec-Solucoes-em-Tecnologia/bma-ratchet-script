@@ -137,7 +137,12 @@ app.post('/api/open/checkin/intelbras-reader/', async (req, res) => {
         console.log(`🆔 UserID extraído: ${userId}`);
         
         // Buscar convite no banco
-        const invite = await prisma.invite.findFirst({
+        // Estratégia: Busca por inviteId, participantId ou guestId
+        let invite = null;
+        
+        // 1. Tenta buscar pelo invite.id (inviteId)
+        console.log(`🔍 Buscando convite pelo inviteId: ${userId}`);
+        invite = await prisma.invite.findFirst({
             where: {
                 id: userId,
                 deleted_at: null
@@ -166,12 +171,89 @@ app.post('/api/open/checkin/intelbras-reader/', async (req, res) => {
             }
         });
         
+        // 2. Se não encontrou, tenta buscar pelo participant.id
         if (!invite) {
-            console.warn(`⚠️  Convite não encontrado: ${userId}`);
+            console.log(`🔍 Buscando convite pelo participantId: ${userId}`);
+            invite = await prisma.invite.findFirst({
+                where: {
+                    participant_id: userId,
+                    type: 'PARTICIPANT',
+                    deleted_at: null
+                },
+                include: {
+                    participant: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true
+                        }
+                    },
+                    guest: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true
+                        }
+                    },
+                    event: {
+                        select: {
+                            id: true,
+                            name: true
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 3. Se ainda não encontrou, tenta buscar pelo guest.id
+        if (!invite) {
+            console.log(`🔍 Buscando convite pelo guestId: ${userId}`);
+            invite = await prisma.invite.findFirst({
+                where: {
+                    guest_id: userId,
+                    type: 'GUEST',
+                    deleted_at: null
+                },
+                include: {
+                    participant: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true
+                        }
+                    },
+                    guest: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true
+                        }
+                    },
+                    event: {
+                        select: {
+                            id: true,
+                            name: true
+                        }
+                    }
+                }
+            });
+        }
+        
+        if (!invite) {
+            console.warn(`⚠️  Convite não encontrado para UserID: ${userId}`);
+            console.warn(`     (tentou: inviteId, participantId, guestId)`);
             return res.status(200).json({ success: true });
         }
         
-        console.log(`✅ Convite encontrado: ${invite.id}`);
+        // Log da estratégia de busca que teve sucesso
+        let searchStrategy = 'inviteId';
+        if (invite.participant_id === userId) {
+            searchStrategy = 'participantId';
+        } else if (invite.guest_id === userId) {
+            searchStrategy = 'guestId';
+        }
+        
+        console.log(`✅ Convite encontrado: ${invite.id} (via ${searchStrategy})`);
         
         // Extrair dados adicionais do evento Intelbras
         const eventData = info.Events?.[0]?.Data || {};
