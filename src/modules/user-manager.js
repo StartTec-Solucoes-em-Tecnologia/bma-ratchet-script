@@ -57,12 +57,18 @@ class UserManager {
             console.log(`📊 Encontrados ${invites.length} invites do evento`);
 
             // Processa cada invite e extrai guest OU participant
-            const users = [];
+            const usersMap = new Map(); // Usar Map para garantir unicidade por inviteId
             let participantsCount = 0;
             let guestsCount = 0;
             let skippedCount = 0;
 
             for (const invite of invites) {
+                // Verifica se já processou este invite
+                if (usersMap.has(invite.id)) {
+                    console.warn(`   ⚠️  Invite duplicado ignorado: ${invite.id}`);
+                    continue;
+                }
+
                 let selectedPerson = null;
                 let personType = null;
 
@@ -100,11 +106,14 @@ class UserManager {
 
                 // Só adiciona se tiver facial_image
                 if (user.facialImageUrl) {
-                    users.push(user);
+                    usersMap.set(invite.id, user);
                 } else {
                     skippedCount++;
                 }
             }
+
+            // Converte Map para Array
+            const users = Array.from(usersMap.values());
 
             console.log(`   👥 Participantes: ${participantsCount}`);
             console.log(`   👤 Convidados: ${guestsCount}`);

@@ -180,7 +180,7 @@ class ImageCacheManager {
 
         for (let i = 0; i < users.length; i++) {
             const user = users[i];
-            console.log(`   ${i + 1}/${users.length} - ${user.name}...`);
+            console.log(`   ${i + 1}/${users.length} - ${user.name} (invite: ${user.inviteId})...`);
             
             const result = await this.downloadAndCacheImage(user.facialImageUrl, user.userId, forceDownload);
             
