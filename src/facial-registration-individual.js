@@ -207,11 +207,17 @@ class IndividualFacialRegistration {
 
                 // Verificar quais usuários estão realmente no dispositivo
                 console.log(`   🔍 Verificando ${usersToRegisterFace.length} usuários no dispositivo...`);
-                const verifyUsers = await this.apiClient.fetchExistingUsers(deviceIp);
-                const verifyUserIds = new Set(verifyUsers.map(u => u.userId));
+                const existingUsers = await this.apiClient.fetchExistingUsers(deviceIp);
                 
-                const confirmedUsers = usersToRegisterFace.filter(u => verifyUserIds.has(u.userId));
-                const missingUsers = usersToRegisterFace.filter(u => !verifyUserIds.has(u.userId));
+                // Cria Set de UserIDs dos usuários existentes
+                const existingUserIds = new Set(existingUsers.map(u => String(u.userId)));
+                
+                const confirmedUsers = usersToRegisterFace.filter(u => 
+                    existingUserIds.has(String(u.userId))
+                );
+                const missingUsers = usersToRegisterFace.filter(u => 
+                    !existingUserIds.has(String(u.userId))
+                );
                 
                 if (missingUsers.length > 0) {
                     console.warn(`   ⚠️  ${missingUsers.length} usuários não encontrados:`);

@@ -97,6 +97,9 @@ class IncrementalFacialRegistration {
         // ========================================
         const userBatches = Math.ceil(usersToRegister.length / BATCH_SIZE);
         
+        // Array para armazenar UserIDs que foram REALMENTE cadastrados
+        const successfulUserIds = [];
+        
         console.log(`   ═══════════════════════════════════════════`);
         console.log(`   📋 FASE 1: CADASTRO DE USUÁRIOS`);
         console.log(`   📦 ${usersToRegister.length} usuários em ${userBatches} lote(s)`);
@@ -114,6 +117,11 @@ class IncrementalFacialRegistration {
                 const result = await this.apiClient.registerUsers(deviceIp, batch);
                 stats.usersRegistered += result.successCount || 0;
                 console.log(`   ✅ ${result.successCount || 0} usuários cadastrados\n`);
+                
+                // Se o cadastro foi bem-sucedido, adiciona os UserIDs ao array
+                if (result.success) {
+                    batch.forEach(user => successfulUserIds.push(user.userId));
+                }
             } catch (error) {
                 console.error(`   ❌ Erro no lote: ${error.message}\n`);
                 stats.errors++;
@@ -121,26 +129,53 @@ class IncrementalFacialRegistration {
         }
         
         console.log(`   ✅ FASE 1 CONCLUÍDA: ${stats.usersRegistered} usuários\n`);
-        console.log(`   ⏸️  Aguardando 3s antes das faces...\n`);
         
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        // Verifica se os usuários realmente foram cadastrados na catraca
+        console.log(`   🔍 Verificando usuários realmente cadastrados na catraca...`);
+        const existingUsersAfterRegistration = await this.apiClient.fetchExistingUsers(deviceIp);
+        console.log(`   📊 Total de usuários na catraca agora: ${existingUsersAfterRegistration.length}`);
+        
+        // Cria Set de UserIDs dos usuários existentes
+        const existingUserIds = new Set(existingUsersAfterRegistration.map(u => String(u.userId)));
+        
+        // Filtra apenas usuários que REALMENTE foram cadastrados
+        const confirmedUserIds = successfulUserIds.filter(userId => 
+            existingUserIds.has(String(userId))
+        );
+        
+        console.log(`   ✅ ${confirmedUserIds.length}/${usersToRegister.length} usuários confirmados na catraca`);
+        
+        if (confirmedUserIds.length < usersToRegister.length) {
+            const missing = usersToRegister.length - confirmedUserIds.length;
+            console.warn(`   ⚠️  ${missing} usuários NÃO foram cadastrados! Apenas estes terão faces registradas.`);
+        }
+        
+        // IMPORTANTE: Filtra usersToRegister para incluir APENAS os confirmados
+        const usersWithConfirmedRegistration = usersToRegister.filter(user => 
+            confirmedUserIds.includes(user.userId)
+        );
+        
+        console.log(`   🎯 ${usersWithConfirmedRegistration.length} usuários prontos para cadastro de faces\n`);
+        console.log(`   ⏸️  Aguardando 5s antes das faces...\n`);
+        await new Promise(resolve => setTimeout(resolve, 5000));
 
         // ========================================
-        // FASE 2: CADASTRAR FACES EM LOTES
+        // FASE 2: CADASTRAR FACES EM LOTES (APENAS CONFIRMADOS)
         // ========================================
-        const faceBatches = Math.ceil(usersToRegister.length / BATCH_SIZE);
+        const faceBatches = Math.ceil(usersWithConfirmedRegistration.length / BATCH_SIZE);
         
         console.log(`   ═══════════════════════════════════════════`);
         console.log(`   📋 FASE 2: CADASTRO DE FACES`);
-        console.log(`   🎭 ${usersToRegister.length} faces em ${faceBatches} lote(s)`);
+        console.log(`   🎭 ${usersWithConfirmedRegistration.length} faces em ${faceBatches} lote(s)`);
         console.log(`   ═══════════════════════════════════════════\n`);
 
         for (let i = 0; i < faceBatches; i++) {
             const start = i * BATCH_SIZE;
-            const end = Math.min(start + BATCH_SIZE, usersToRegister.length);
-            const batch = usersToRegister.slice(start, end);
+            const end = Math.min(start + BATCH_SIZE, usersWithConfirmedRegistration.length);
+            const batch = usersWithConfirmedRegistration.slice(start, end);
             
             console.log(`   🎭 Lote ${i + 1}/${faceBatches} (${batch.length} faces)`);
+            console.log(`   👤 UserIDs: ${batch.map(u => u.userId).slice(0, 5).join(', ')}...`);
 
             try {
                 const result = await this.apiClient.registerFaces(deviceIp, batch);
@@ -155,10 +190,10 @@ class IncrementalFacialRegistration {
         console.log(`   ✅ FASE 2 CONCLUÍDA: ${stats.facesRegistered} faces\n`);
 
         // ========================================
-        // SALVAR NO CACHE
+        // SALVAR NO CACHE (APENAS CONFIRMADOS)
         // ========================================
         console.log(`   💾 Salvando no cache...`);
-        for (const user of usersToRegister) {
+        for (const user of usersWithConfirmedRegistration) {
             try {
                 // user.userId já contém inviteId || participant.id || guest.id
                 await this.userManager.saveUser(
@@ -178,7 +213,7 @@ class IncrementalFacialRegistration {
                 console.error(`   ⚠️  Erro ao salvar cache: ${error.message}`);
             }
         }
-        console.log(`   ✅ Cache atualizado\n`);
+        console.log(`   ✅ Cache atualizado (${usersWithConfirmedRegistration.length} usuários)\n`);
 
         return stats;
     }

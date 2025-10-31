@@ -221,6 +221,7 @@ class ApiClient {
             console.log(`   🔗 URL: ${url}`);
             console.log(`   📝 Enviando ${userList.length} usuários DE UMA VEZ no lote`);
             console.log(`   👥 Usuários: ${userList.map(u => `${u.UserName} (ID: ${u.UserID})`).slice(0, 3).join(', ')}...`);
+            console.log(`   🆔 UserIDs completos: ${userList.map(u => u.UserID).join(', ')}`);
 
             const response = await axiosDigest.request({
                 method: 'POST',

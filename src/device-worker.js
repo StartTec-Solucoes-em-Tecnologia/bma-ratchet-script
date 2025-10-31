@@ -22,15 +22,15 @@ class DeviceWorker {
             const ApiClient = require('./modules/api-client');
             const UserManager = require('./modules/user-manager');
             const CacheManager = require('./modules/cache-manager');
-            
+
             this.apiClient = new ApiClient();
             this.userManager = new UserManager();
             this.cacheManager = new CacheManager();
-            
+
             // Inicializa Redis e cache
             await this.userManager.initRedis();
             await this.cacheManager.init();
-            
+
             console.log('✅ Worker inicializado com sucesso');
         } catch (error) {
             console.error('❌ Erro ao inicializar worker:', error.message);
@@ -45,7 +45,7 @@ class DeviceWorker {
         try {
             console.log(`🖥️  Processando dispositivo ${deviceIp}...`);
             console.log(`   👥 ${users.length} usuários para processar`);
-            
+
             const stats = {
                 usersVerified: 0,
                 usersDeleted: 0,
@@ -59,7 +59,7 @@ class DeviceWorker {
             const existingUsers = await this.apiClient.fetchExistingUsers(deviceIp);
             const existingUserIds = new Set(existingUsers.map(u => u.userId));
             const existingUserMap = new Map(existingUsers.map(u => [u.userId, u]));
-            
+
             stats.usersVerified += existingUsers.length;
             console.log(`   📊 ${existingUsers.length} usuários encontrados no dispositivo`);
 
@@ -67,7 +67,7 @@ class DeviceWorker {
             const usersToDelete = users.filter(u => existingUserIds.has(u.userId));
             if (usersToDelete.length > 0) {
                 console.log(`   🗑️  Deletando ${usersToDelete.length} usuários existentes...`);
-                
+
                 for (const user of usersToDelete) {
                     const existingUser = existingUserMap.get(user.userId);
                     if (existingUser && existingUser.recNo) {
@@ -86,7 +86,10 @@ class DeviceWorker {
             // ========================================
             const BATCH_SIZE = 10;
             const totalBatches = Math.ceil(users.length / BATCH_SIZE);
-            
+
+            // Array para armazenar UserIDs que foram REALMENTE cadastrados
+            const successfulUserIds = [];
+
             console.log(`\n   ═══════════════════════════════════════════`);
             console.log(`   📋 FASE 1: CADASTRO DE TODOS OS USUÁRIOS`);
             console.log(`   📦 ${users.length} usuários em ${totalBatches} lote(s) de até ${BATCH_SIZE}`);
@@ -96,7 +99,7 @@ class DeviceWorker {
                 const start = batchIndex * BATCH_SIZE;
                 const end = Math.min(start + BATCH_SIZE, users.length);
                 const batch = users.slice(start, end);
-                
+
                 console.log(`   📦 Lote ${batchIndex + 1}/${totalBatches} (${batch.length} usuários)`);
 
                 // Cadastrar usuários do lote
@@ -106,29 +109,59 @@ class DeviceWorker {
                 }
                 stats.usersRegistered += userRegResult.successCount || 0;
                 console.log(`   ✅ ${userRegResult.successCount || 0} usuários cadastrados\n`);
+
+                // Se o cadastro foi bem-sucedido, adiciona os UserIDs ao array
+                if (userRegResult.success) {
+                    batch.forEach(user => successfulUserIds.push(user.userId));
+                }
             }
-            
+
             console.log(`   ✅ FASE 1 CONCLUÍDA: ${stats.usersRegistered} usuários cadastrados\n`);
-            console.log(`   ⏸️  Aguardando antes de iniciar cadastro de faces...\n`);
-            
-            // Aguarda 3 segundos para garantir que todos os usuários foram processados
+
+            // Verifica se os usuários realmente foram cadastrados na catraca
+            console.log(`   🔍 Verificando usuários realmente cadastrados na catraca...`);
+            const existingUsersAfterRegistration = await this.apiClient.fetchExistingUsers(deviceIp);
+            console.log(`   📊 Total de usuários na catraca agora: ${existingUsersAfterRegistration.length}`);
+
+            // Cria Set de UserIDs dos usuários existentes após o cadastro
+            const confirmedUserIdsSet = new Set(existingUsersAfterRegistration.map(u => String(u.userId)));
+
+            // Filtra apenas usuários que REALMENTE foram cadastrados
+            const confirmedUserIds = successfulUserIds.filter(userId =>
+                confirmedUserIdsSet.has(String(userId))
+            );
+
+            console.log(`   ✅ ${confirmedUserIds.length}/${users.length} usuários confirmados na catraca`);
+
+            if (confirmedUserIds.length < users.length) {
+                const missing = users.length - confirmedUserIds.length;
+                console.warn(`   ⚠️  ${missing} usuários NÃO foram cadastrados! Apenas estes terão faces registradas.`);
+            }
+
+            // IMPORTANTE: Filtra users para incluir APENAS os confirmados
+            const usersWithConfirmedRegistration = users.filter(user =>
+                confirmedUserIds.includes(user.userId)
+            );
+
+            console.log(`   🎯 ${usersWithConfirmedRegistration.length} usuários prontos para cadastro de faces\n`);
+            console.log(`   ⏸️  Aguardando 3s antes de iniciar cadastro de faces...\n`);
             await new Promise(resolve => setTimeout(resolve, 3000));
 
             // ========================================
-            // FASE 2: CADASTRAR TODAS AS FACES EM LOTES DE 10
+            // FASE 2: CADASTRAR TODAS AS FACES EM LOTES DE 10 (APENAS CONFIRMADOS)
             // ========================================
-            const faceBatches = Math.ceil(users.length / BATCH_SIZE);
-            
+            const faceBatches = Math.ceil(usersWithConfirmedRegistration.length / BATCH_SIZE);
+
             console.log(`   ═══════════════════════════════════════════`);
             console.log(`   📋 FASE 2: CADASTRO DE TODAS AS FACES`);
-            console.log(`   🎭 ${users.length} faces em ${faceBatches} lote(s) de até ${BATCH_SIZE}`);
+            console.log(`   🎭 ${usersWithConfirmedRegistration.length} faces em ${faceBatches} lote(s) de até ${BATCH_SIZE}`);
             console.log(`   ═══════════════════════════════════════════\n`);
 
             for (let batchIndex = 0; batchIndex < faceBatches; batchIndex++) {
                 const start = batchIndex * BATCH_SIZE;
-                const end = Math.min(start + BATCH_SIZE, users.length);
-                const batch = users.slice(start, end);
-                
+                const end = Math.min(start + BATCH_SIZE, usersWithConfirmedRegistration.length);
+                const batch = usersWithConfirmedRegistration.slice(start, end);
+
                 console.log(`   🎭 Lote ${batchIndex + 1}/${faceBatches} (${batch.length} faces)`);
 
                 // Cadastrar faces do lote
@@ -139,14 +172,14 @@ class DeviceWorker {
                 stats.facesRegistered += faceRegResult.successCount || 0;
                 console.log(`   ✅ ${faceRegResult.successCount || 0} faces cadastradas\n`);
             }
-            
+
             console.log(`   ✅ FASE 2 CONCLUÍDA: ${stats.facesRegistered} faces cadastradas\n`);
 
-            // 6. Salvar no cache
+            // 6. Salvar no cache (APENAS CONFIRMADOS)
             console.log(`   💾 Salvando no cache...`);
-            for (const user of users) {
-                // USA O INVITE ID como identificador único
-                const saveResult = await this.userManager.saveUser(deviceIp, user.inviteId || user.userId, {
+            for (const user of usersWithConfirmedRegistration) {
+                // user.userId já contém inviteId || participant.id || guest.id
+                const saveResult = await this.userManager.saveUser(deviceIp, user.userId, {
                     name: user.name,
                     email: user.email,
                     document: user.document,
@@ -154,7 +187,7 @@ class DeviceWorker {
                     type: user.type,
                     inviteId: user.inviteId
                 }, this.cacheManager);
-                
+
                 if (saveResult.success) {
                     stats.redisSaves++;
                 }
@@ -162,7 +195,7 @@ class DeviceWorker {
             console.log(`   ✅ ${stats.redisSaves} usuários salvos no cache`);
 
             console.log(`   🎉 Processamento do dispositivo ${deviceIp} concluído com sucesso!`);
-            
+
             return {
                 success: true,
                 deviceIp,
@@ -213,7 +246,7 @@ class DeviceWorker {
 
             // Retorna resultado
             console.log(`📊 Resultado final:`, JSON.stringify(result, null, 2));
-            
+
             process.exit(result.success ? 0 : 1);
 
         } catch (error) {
