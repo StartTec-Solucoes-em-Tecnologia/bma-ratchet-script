@@ -32,7 +32,7 @@ class FacialRegistrationService {
         await this.userManager.initRedis();
         await this.cacheManager.init();
         await this.imageCacheManager.init();
-        
+
         // Sincroniza cache JSON com Redis
         await this.cacheManager.syncWithRedis(this.userManager.redisClient);
     }
@@ -45,7 +45,7 @@ class FacialRegistrationService {
             // Busca usuários com facial_image
             console.log('🔍 Buscando usuários com imagens faciais...');
             const users = await this.userManager.fetchInvitesWithFacialImages();
-            
+
             if (users.length === 0) {
                 console.log('ℹ️  Nenhum usuário encontrado com imagem facial');
                 return {
@@ -56,8 +56,8 @@ class FacialRegistrationService {
 
             console.log(`\n📥 Baixando ${users.length} imagens faciais...\n`);
 
-            // 1. Baixa todas as imagens (verifica cache primeiro)
-            const downloadResults = await this.imageCacheManager.downloadAllImages(users);
+            // 1. Baixa todas as imagens (FORÇANDO DOWNLOAD)
+            const downloadResults = await this.imageCacheManager.downloadAllImages(users, true);
 
             if (downloadResults.users.length === 0) {
                 throw new Error('Nenhuma imagem foi baixada com sucesso');
@@ -91,7 +91,7 @@ class FacialRegistrationService {
             }
 
             const ipArray = deviceIps.split(',').map(ip => ip.trim());
-            
+
             console.log(`📡 Registrando em ${ipArray.length} leitora(s) facial(is)...`);
             console.log(`   IPs: ${ipArray.join(', ')}\n`);
 
@@ -118,14 +118,14 @@ class FacialRegistrationService {
                 console.log(`\n═══════════════════════════════════════════`);
                 console.log(`📦 Lote ${batchIndex + 1}/${batches.length} (${batch.length} usuários)`);
                 console.log(`═══════════════════════════════════════════`);
-                
+
                 // Processa todas as leitoras em paralelo para este lote
                 const batchResult = await this.deviceProcessor.processMultipleDevices(ipArray, batch, batchIndex);
-                
+
                 // Atualiza estatísticas globais
                 globalStats.successfulBatches += batchResult.successful;
                 globalStats.failedBatches += batchResult.failed;
-                
+
                 // Processa resultados individuais
                 for (const result of batchResult.results) {
                     // Garante que stats existe
@@ -190,7 +190,7 @@ class FacialRegistrationService {
         console.log('\n' + '═'.repeat(60));
         console.log('📊 RELATÓRIO FINAL - REGISTRO PARALELO');
         console.log('═'.repeat(60));
-        
+
         console.log(`\n🔍 Operações Realizadas:`);
         console.log(`   👀 Usuários verificados: ${globalStats.usersVerified}`);
         console.log(`   🗑️  Usuários deletados: ${globalStats.usersDeleted}`);
@@ -198,13 +198,13 @@ class FacialRegistrationService {
         console.log(`   🎭 Faces cadastradas: ${globalStats.facesRegistered}`);
         console.log(`   💾 Saves no Redis: ${globalStats.redisSaves}`);
         console.log(`   📄 Cache JSON: Ativo`);
-        
+
         // Estatísticas do cache de imagens
         const imageCacheStats = this.imageCacheManager.getCacheStats();
         console.log(`\n📷 Cache de Imagens:`);
         console.log(`   📁 Total de imagens: ${imageCacheStats.totalImages}`);
         console.log(`   💾 Tamanho total: ${imageCacheStats.totalSizeMB}MB`);
-        
+
         console.log(`\n📈 Resultados:`);
         console.log(`   ✅ Lotes bem-sucedidos: ${globalStats.successfulBatches}`);
         console.log(`   ❌ Lotes com erro: ${globalStats.failedBatches}`);
@@ -216,11 +216,11 @@ class FacialRegistrationService {
             const deviceResults = results.filter(r => r.deviceIp === ip);
             const successful = deviceResults.filter(r => r.success).length;
             const failed = deviceResults.filter(r => !r.success).length;
-            
+
             console.log(`\n🖥️  ${ip}:`);
             console.log(`   ✅ Sucessos: ${successful}`);
             console.log(`   ❌ Falhas: ${failed}`);
-            
+
             if (failed > 0) {
                 console.log(`   📋 Erros:`);
                 deviceResults

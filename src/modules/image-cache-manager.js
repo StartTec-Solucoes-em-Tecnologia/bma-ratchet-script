@@ -87,11 +87,21 @@ class ImageCacheManager {
     /**
      * Baixa e salva imagem no cache
      */
-    async downloadAndCacheImage(imageUrl, userId) {
+    async downloadAndCacheImage(imageUrl, userId, forceDownload = false) {
+        // Valida URL
+        if (!imageUrl || typeof imageUrl !== 'string') {
+            console.error(`❌ URL inválida para ${userId}: ${imageUrl}`);
+            return {
+                success: false,
+                error: 'URL inválida ou não fornecida'
+            };
+        }
+
         const cacheInfo = await this.isImageCached(imageUrl);
         
-        if (cacheInfo.cached) {
-            console.log(`📷 Imagem já em cache: ${userId}`);
+        // Se está em cache E não é forceDownload, retorna do cache
+        if (cacheInfo.cached && !forceDownload) {
+            // console.log(`📷 Imagem já em cache: ${userId}`);
             return {
                 success: true,
                 path: cacheInfo.path,
@@ -107,10 +117,17 @@ class ImageCacheManager {
                 timeout: 30000,
                 headers: {
                     'User-Agent': 'BMA-Facial-Registration/2.0.0'
-                }
+                },
+                validateStatus: (status) => status === 200
             });
 
             const imageBuffer = Buffer.from(response.data);
+            
+            // Valida se realmente é uma imagem
+            if (imageBuffer.length < 100) {
+                throw new Error('Arquivo muito pequeno (possivelmente inválido)');
+            }
+
             await fs.writeFile(cacheInfo.path, imageBuffer);
             
             // Salva metadados
@@ -132,10 +149,14 @@ class ImageCacheManager {
             };
 
         } catch (error) {
-            console.error(`❌ Erro ao baixar imagem de ${userId}:`, error.message);
+            const errorMsg = error.response 
+                ? `HTTP ${error.response.status}: ${error.response.statusText}`
+                : error.message;
+            console.error(`❌ Erro ao baixar imagem de ${userId}: ${errorMsg}`);
+            console.error(`   URL: ${imageUrl}`);
             return {
                 success: false,
-                error: error.message
+                error: errorMsg
             };
         }
     }
@@ -143,8 +164,11 @@ class ImageCacheManager {
     /**
      * Baixa todas as imagens necessárias
      */
-    async downloadAllImages(users) {
+    async downloadAllImages(users, forceDownload = false) {
         console.log(`\n📥 Baixando ${users.length} imagens...`);
+        if (forceDownload) {
+            console.log(`   🔄 Modo: FORÇAR DOWNLOAD (ignora cache)`);
+        }
         
         const results = {
             total: users.length,
@@ -158,7 +182,7 @@ class ImageCacheManager {
             const user = users[i];
             console.log(`   ${i + 1}/${users.length} - ${user.name}...`);
             
-            const result = await this.downloadAndCacheImage(user.facialImageUrl, user.userId);
+            const result = await this.downloadAndCacheImage(user.facialImageUrl, user.userId, forceDownload);
             
             if (result.success) {
                 results.users.push({

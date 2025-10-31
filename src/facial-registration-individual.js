@@ -55,8 +55,8 @@ class IndividualFacialRegistration {
 
             console.log(`\n📥 Baixando ${users.length} imagens faciais...\n`);
 
-            // 1. Baixa todas as imagens (verifica cache primeiro)
-            const downloadResults = await this.imageCacheManager.downloadAllImages(users);
+            // 1. Baixa todas as imagens (FORÇANDO DOWNLOAD)
+            const downloadResults = await this.imageCacheManager.downloadAllImages(users, true);
 
             if (downloadResults.users.length === 0) {
                 throw new Error('Nenhuma imagem foi baixada com sucesso');
@@ -235,7 +235,8 @@ class IndividualFacialRegistration {
                 // Salvar no cache
                 console.log(`   💾 Salvando ${confirmedUsers.length} usuários no cache...`);
                 for (const user of confirmedUsers) {
-                    const saveResult = await this.userManager.saveUser(deviceIp, user.userId, {
+                    // USA O INVITE ID como identificador único
+                    const saveResult = await this.userManager.saveUser(deviceIp, user.inviteId || user.userId, {
                         name: user.name,
                         email: user.email,
                         document: user.document,

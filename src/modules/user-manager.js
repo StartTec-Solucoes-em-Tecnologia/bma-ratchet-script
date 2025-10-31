@@ -56,60 +56,61 @@ class UserManager {
 
             console.log(`📊 Encontrados ${invites.length} invites do evento`);
 
-            // Processa cada invite e extrai o melhor usuário (guest > participant)
+            // Processa cada invite e extrai guest OU participant
             const users = [];
             let participantsCount = 0;
             let guestsCount = 0;
             let skippedCount = 0;
 
             for (const invite of invites) {
-                let selectedUser = null;
+                let selectedPerson = null;
+                let personType = null;
 
-                // Verifica se tem guest com facial_image
-                if (invite.guest && invite.guest.facial_image) {
-                    selectedUser = {
-                        userId: invite.guest.id,
-                        name: invite.guest.name,
-                        email: invite.guest.email,
-                        document: invite.guest.document,
-                        cellphone: invite.guest.cellphone,
-                        facialImageUrl: invite.guest.facial_image,
-                        type: 'guest',
-                        inviteId: invite.id,
-                        priority: 2
-                    };
+                // Prioridade 1: Guest (se existir)
+                if (invite.guest) {
+                    selectedPerson = invite.guest;
+                    personType = 'guest';
                     guestsCount++;
                 }
-                // Se não tem guest, verifica participant com facial_image
-                else if (invite.participant && invite.participant.facial_image) {
-                    selectedUser = {
-                        userId: invite.participant.id,
-                        name: invite.participant.name,
-                        email: invite.participant.email,
-                        document: invite.participant.document,
-                        cellphone: invite.participant.cellphone,
-                        facialImageUrl: invite.participant.facial_image,
-                        type: 'participant',
-                        inviteId: invite.id,
-                        priority: 1
-                    };
+                // Prioridade 2: Participant (se não tiver guest)
+                else if (invite.participant) {
+                    selectedPerson = invite.participant;
+                    personType = 'participant';
                     participantsCount++;
-                } else {
-                    // Invite sem facial_image em nenhum dos dois
+                }
+
+                // Se não tem nem guest nem participant, pula
+                if (!selectedPerson) {
                     skippedCount++;
                     continue;
                 }
 
-                if (selectedUser) {
-                    users.push(selectedUser);
+                // Monta o objeto do usuário
+                const user = {
+                    inviteId: invite.id,                    // ID do invite (chave principal)
+                    userId: selectedPerson.id,              // ID do guest ou participant
+                    name: selectedPerson.name,
+                    email: selectedPerson.email,
+                    document: selectedPerson.document,
+                    cellphone: selectedPerson.cellphone,
+                    facialImageUrl: selectedPerson.facial_image,
+                    type: personType,
+                    priority: personType === 'guest' ? 2 : 1
+                };
+
+                // Só adiciona se tiver facial_image
+                if (user.facialImageUrl) {
+                    users.push(user);
+                } else {
+                    skippedCount++;
                 }
             }
 
-            console.log(`   👥 Participantes selecionados: ${participantsCount}`);
-            console.log(`   👤 Convidados selecionados: ${guestsCount}`);
-            console.log(`   ⏭️  Invites sem facial: ${skippedCount}`);
-            console.log(`   🎯 Total de usuários: ${users.length}`);
-            console.log(`   📋 Prioridade: Guest > Participant\n`);
+            console.log(`   👥 Participantes: ${participantsCount}`);
+            console.log(`   👤 Convidados: ${guestsCount}`);
+            console.log(`   ⏭️  Sem facial_image: ${skippedCount}`);
+            console.log(`   🎯 Total de usuários com facial: ${users.length}`);
+            console.log(`   📋 Regra: Guest > Participant (1 por invite)\n`);
 
             return users;
         } catch (error) {
