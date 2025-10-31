@@ -82,7 +82,7 @@ class ApiClient {
             const cleanUserName = userName.substring(0, 50).replace(/[^\w\s]/g, '').trim();
             // USA O INVITE ID COMO USER ID NA CATRACA
             const userIdForDevice = String(user.inviteId || user.userId || Date.now());
-            
+
             // Monta payload para um único usuário
             const userData = {
                 UserID: userIdForDevice,
@@ -118,29 +118,29 @@ class ApiClient {
 
             const responseText = response.data.trim();
             const isSuccess = responseText === 'OK';
-            
+
             if (!isSuccess) {
                 console.warn(`⚠️  Falha ao cadastrar usuário ${userId}: "${responseText}"`);
             } else {
                 console.log(`     ✅ Usuário ${userId} cadastrado - ${responseText}`);
             }
 
-            return { 
-                success: isSuccess, 
-                response: responseText, 
+            return {
+                success: isSuccess,
+                response: responseText,
                 userId: userId,
                 userName: cleanUserName
             };
         } catch (error) {
             let errorDetails = error.message;
-            
+
             if (error.response) {
                 const status = error.response.status;
                 const statusText = error.response.statusText;
                 const responseData = error.response.data;
                 errorDetails = `HTTP ${status}: ${statusText} - ${JSON.stringify(responseData)}`;
             }
-            
+
             console.error(`❌ Erro ao cadastrar usuário ${user.userId} em ${deviceIp}:`, errorDetails);
             return { success: false, error: errorDetails, userId: user.userId };
         }
@@ -152,16 +152,16 @@ class ApiClient {
     async registerUsers(deviceIp, userBatch) {
         try {
             const axiosDigest = this.createDigestAuth();
-            
+
             console.log(`   📤 Cadastrando ${userBatch.length} usuários em lote em ${deviceIp}...`);
-            
+
             // Prepara lista de usuários para o batch
             const userList = userBatch.map(user => {
                 const userName = user.formattedName || user.name || 'Usuario';
                 const cleanUserName = userName.substring(0, 50).replace(/[^\w\s]/g, '').trim();
-                // USA O INVITE ID COMO USER ID NA CATRACA
-                const userIdForDevice = String(user.inviteId || user.userId || Date.now());
-                
+                // USA O userId (que já é inviteId || participant/guest.id)
+                const userIdForDevice = String(user.userId || Date.now());
+
                 return {
                     UserID: userIdForDevice,
                     UserName: cleanUserName,
@@ -183,7 +183,7 @@ class ApiClient {
 
             console.log(`   🔗 URL: ${url}`);
             console.log(`   📝 Enviando ${userList.length} usuários DE UMA VEZ no lote`);
-            console.log(`   👥 Usuários: ${userList.map(u => u.UserName).join(', ')}`);
+            console.log(`   👥 Usuários: ${userList.map(u => `${u.UserName} (ID: ${u.UserID})`).slice(0, 3).join(', ')}...`);
 
             const response = await axiosDigest.request({
                 method: 'POST',
@@ -198,15 +198,15 @@ class ApiClient {
 
             const responseText = response.data.trim();
             const isSuccess = responseText === 'OK';
-            
+
             if (!isSuccess) {
                 console.warn(`   ⚠️  Resposta inesperada: "${responseText}"`);
             } else {
                 console.log(`   ✅ Lote cadastrado com sucesso`);
             }
 
-            return { 
-                success: isSuccess, 
+            return {
+                success: isSuccess,
                 response: responseText,
                 successCount: isSuccess ? userBatch.length : 0,
                 failedCount: isSuccess ? 0 : userBatch.length,
@@ -214,12 +214,12 @@ class ApiClient {
             };
         } catch (error) {
             let errorDetails = error.message;
-            
+
             if (error.response) {
                 const status = error.response.status;
                 const statusText = error.response.statusText;
                 const responseData = error.response.data;
-                
+
                 // Decodifica erro se disponível
                 if (responseData && responseData.detail && responseData.detail.FailCodes) {
                     const failCodes = responseData.detail.FailCodes;
@@ -233,10 +233,10 @@ class ApiClient {
                     errorDetails = `HTTP ${status}: ${statusText} - ${JSON.stringify(responseData)}`;
                 }
             }
-            
+
             console.error(`   ❌ Erro ao cadastrar lote em ${deviceIp}:`, errorDetails);
-            return { 
-                success: false, 
+            return {
+                success: false,
                 error: errorDetails,
                 successCount: 0,
                 failedCount: userBatch.length,
@@ -272,10 +272,10 @@ class ApiClient {
 
             // Usa a API V2 de face (individual)
             const url = `http://${deviceIp}/cgi-bin/AccessFace.cgi?action=insertMulti`;
-            
+
             // USA O INVITE ID COMO USER ID NA CATRACA
             const userIdForDevice = String(user.inviteId || user.userId);
-            
+
             const faceData = {
                 UserID: userIdForDevice,
                 PhotoData: [user.photoBase64]
@@ -301,26 +301,26 @@ class ApiClient {
 
             const responseText = response.data.trim();
             const isSuccess = responseText === 'OK';
-            
+
             if (!isSuccess) {
                 console.warn(`⚠️  Falha ao cadastrar face do usuário ${user.userId}: "${responseText}"`);
             } else {
                 console.log(`     ✅ Face do usuário ${user.userId} cadastrada`);
             }
 
-            return { 
-                success: isSuccess, 
-                response: responseText, 
+            return {
+                success: isSuccess,
+                response: responseText,
                 userId: user.userId
             };
         } catch (error) {
             let errorDetails = error.message;
-            
+
             if (error.response) {
                 const status = error.response.status;
                 const statusText = error.response.statusText;
                 const responseData = error.response.data;
-                
+
                 // Decodifica erro se disponível
                 if (responseData && responseData.detail && responseData.detail.FailCodes) {
                     const failCode = responseData.detail.FailCodes[0];
@@ -331,7 +331,7 @@ class ApiClient {
                     errorDetails = `HTTP ${status}: ${statusText} - ${JSON.stringify(responseData)}`;
                 }
             }
-            
+
             console.error(`❌ Erro ao cadastrar face do usuário ${user.userId} em ${deviceIp}:`, errorDetails);
             return { success: false, error: errorDetails, userId: user.userId };
         }
@@ -343,19 +343,19 @@ class ApiClient {
     async registerFaces(deviceIp, userBatch) {
         try {
             const axiosDigest = this.createDigestAuth();
-            
+
             console.log(`   🎭 Cadastrando ${userBatch.length} faces em lote em ${deviceIp}...`);
-            
+
             // Prepara lista de faces para o batch
             const faceList = userBatch.map(user => {
                 if (!user.photoBase64) {
-                    console.warn(`   ⚠️  Usuário ${user.inviteId || user.userId} sem dados de foto`);
+                    console.warn(`   ⚠️  Usuário ${user.userId} sem dados de foto`);
                     return null;
                 }
-                
-                // USA O INVITE ID COMO USER ID NA CATRACA
-                const userIdForDevice = String(user.inviteId || user.userId);
-                
+
+                // USA O userId (que já é inviteId || participant/guest.id)
+                const userIdForDevice = String(user.userId);
+
                 return {
                     UserID: userIdForDevice,
                     PhotoData: [user.photoBase64]
@@ -380,6 +380,7 @@ class ApiClient {
             const url = `http://${deviceIp}/cgi-bin/AccessFace.cgi?action=insertMulti`;
 
             console.log(`   🔗 URL: ${url}`);
+            console.log(`   🎭 Faces: ${faceList.map(f => `ID: ${f.UserID}`).slice(0, 5).join(', ')}...`);
             console.log(`   📝 Enviando ${faceList.length} faces DE UMA VEZ no lote`);
             console.log(`   🎭 UserIDs: ${faceList.map(f => f.UserID).join(', ')}`);
 
@@ -396,15 +397,15 @@ class ApiClient {
 
             const responseText = response.data.trim();
             const isSuccess = responseText === 'OK';
-            
+
             if (!isSuccess) {
                 console.warn(`   ⚠️  Resposta inesperada: "${responseText}"`);
             } else {
                 console.log(`   ✅ Lote de faces cadastrado com sucesso`);
             }
 
-            return { 
-                success: isSuccess, 
+            return {
+                success: isSuccess,
                 response: responseText,
                 successCount: isSuccess ? faceList.length : 0,
                 failedCount: isSuccess ? 0 : faceList.length,
@@ -412,12 +413,12 @@ class ApiClient {
             };
         } catch (error) {
             let errorDetails = error.message;
-            
+
             if (error.response) {
                 const status = error.response.status;
                 const statusText = error.response.statusText;
                 const responseData = error.response.data;
-                
+
                 // Decodifica erro se disponível
                 if (responseData && responseData.detail && responseData.detail.FailCodes) {
                     const failCodes = responseData.detail.FailCodes;
@@ -431,10 +432,10 @@ class ApiClient {
                     errorDetails = `HTTP ${status}: ${statusText} - ${JSON.stringify(responseData)}`;
                 }
             }
-            
+
             console.error(`   ❌ Erro ao cadastrar lote de faces em ${deviceIp}:`, errorDetails);
-            return { 
-                success: false, 
+            return {
+                success: false,
                 error: errorDetails,
                 successCount: 0,
                 failedCount: userBatch.length,
@@ -449,19 +450,19 @@ class ApiClient {
     async processBatch(deviceIp, userBatch, stats, retryCount = 0) {
         try {
             console.log(`\n🖥️  Processando leitora ${deviceIp}...`);
-            
+
             // 1. Buscar usuários existentes
             const existingUsers = await this.fetchExistingUsers(deviceIp);
             const existingUserIds = new Set(existingUsers.map(u => u.userId));
             const existingUserMap = new Map(existingUsers.map(u => [u.userId, u]));
-            
+
             stats.usersVerified += existingUsers.length;
 
             // 2. Deletar usuários que já existem
             const usersToDelete = userBatch.filter(u => existingUserIds.has(u.userId));
             if (usersToDelete.length > 0) {
                 console.log(`   🗑️  Deletando ${usersToDelete.length} usuários existentes...`);
-                
+
                 for (const user of usersToDelete) {
                     const existingUser = existingUserMap.get(user.userId);
                     if (existingUser && existingUser.recNo) {
@@ -485,7 +486,7 @@ class ApiClient {
                     await new Promise(resolve => setTimeout(resolve, 5000));
                     return this.processBatch(deviceIp, userBatch, stats, retryCount + 1);
                 }
-                
+
                 return {
                     success: false,
                     error: `Falha ao cadastrar usuários: ${userRegResult.error}`,
@@ -509,7 +510,7 @@ class ApiClient {
                     await new Promise(resolve => setTimeout(resolve, 5000));
                     return this.processBatch(deviceIp, userBatch, stats, retryCount + 1);
                 }
-                
+
                 return {
                     success: false,
                     error: `Falha ao cadastrar faces: ${faceRegResult.error}`,
@@ -520,7 +521,7 @@ class ApiClient {
             console.log(`   ✅ ${faceRegResult.successCount || userBatch.length} faces cadastradas`);
 
             console.log(`   ✅ Lote completo registrado na leitora ${deviceIp}`);
-            
+
             return {
                 success: true,
                 stats
@@ -542,21 +543,21 @@ class ApiClient {
     parseRecordFinderResponse(responseText) {
         const users = [];
         const lines = responseText.split('\n');
-        
+
         let recordIndex = 0;
         let currentRecord = {};
-        
+
         for (const line of lines) {
             const trimmedLine = line.trim();
             if (!trimmedLine) continue;
-            
+
             if (trimmedLine.startsWith('records[') && trimmedLine.includes(']=')) {
                 // Nova linha de registro
                 const match = trimmedLine.match(/records\[(\d+)\]\.(.+)=(.+)/);
                 if (match) {
                     const [, index, field, value] = match;
                     const recordNum = parseInt(index);
-                    
+
                     if (recordNum !== recordIndex) {
                         // Novo registro, salva o anterior
                         if (Object.keys(currentRecord).length > 0) {
@@ -565,17 +566,17 @@ class ApiClient {
                         currentRecord = {};
                         recordIndex = recordNum;
                     }
-                    
+
                     currentRecord[field] = value;
                 }
             }
         }
-        
+
         // Adiciona o último registro
         if (Object.keys(currentRecord).length > 0) {
             users.push(currentRecord);
         }
-        
+
         return users.map(user => ({
             userId: user.UserID,
             recNo: user.RecNo,
