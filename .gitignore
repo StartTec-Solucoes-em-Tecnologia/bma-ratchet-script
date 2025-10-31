@@ -65,4 +65,5 @@ Thumbs.db
 
 # Lock files
 .facial-registration.lock
+.last-processed-timestamp.json
 temp/

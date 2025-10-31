@@ -121,8 +121,8 @@ class FacialRegistrationCron {
       this.service = new FacialRegistrationService();
       await this.service.init();
 
-      // Executa registro
-      const result = await this.service.registerAllFacesInAllDevices();
+      // Executa registro incremental (apenas usuários modificados)
+      const result = await this.service.registerModifiedFacesInAllDevices();
 
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
       console.log(`\n✅ Execução concluída em ${duration}s`);
