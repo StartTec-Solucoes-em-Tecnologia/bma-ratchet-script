@@ -124,25 +124,20 @@ class UserManager {
                 console.log(`\n   ⚠️  ${diff} pessoas com facial estão em OUTROS EVENTOS`);;
             }
 
-            // Processa participants e guests em um único Map
-            const usersByPersonId = new Map();    // Deduplica por userId (pessoa física)
-            let imageUpdates = 0;
-            let duplicatedPeople = 0;
+            // Processa participants e guests separadamente (SEM deduplica)
+            const users = [];
 
             // 1. Processa TODOS os participants
             for (const participant of participants) {
                 const inviteId = participant.invite[0]?.id;
 
-                if (!inviteId) {
-                    console.warn(`   ⚠️  Participant ${participant.name} sem invite, pulando...`);
-                    continue;
-                }
+                // UserID = inviteId (prioridade) OU participant.id (fallback)
+                const userIdForDevice = inviteId || participant.id;
 
                 const user = {
-                    inviteId: inviteId,                     // ID do invite (usado na catraca como UserID)
-                    userId: inviteId,                       // IMPORTANTE: userId = inviteId para a catraca
+                    inviteId: inviteId || null,             // ID do invite (pode ser null)
+                    userId: userIdForDevice,                // IMPORTANTE: inviteId OU participant.id para a catraca
                     participantId: participant.id,          // ID real do participant no banco
-                    personKey: `invite_${inviteId}`,        // Chave única para deduplica
                     name: participant.name,
                     email: participant.email,
                     document: participant.document,
@@ -152,23 +147,20 @@ class UserManager {
                     priority: 1
                 };
 
-                usersByPersonId.set(user.personKey, user);
+                users.push(user);
             }
 
             // 2. Processa TODOS os guests
             for (const guest of guests) {
                 const inviteId = guest.invite[0]?.id;
 
-                if (!inviteId) {
-                    console.warn(`   ⚠️  Guest ${guest.name} sem invite, pulando...`);
-                    continue;
-                }
+                // UserID = inviteId (prioridade) OU guest.id (fallback)
+                const userIdForDevice = inviteId || guest.id;
 
                 const user = {
-                    inviteId: inviteId,                     // ID do invite (usado na catraca como UserID)
-                    userId: inviteId,                       // IMPORTANTE: userId = inviteId para a catraca
+                    inviteId: inviteId || null,             // ID do invite (pode ser null)
+                    userId: userIdForDevice,                // IMPORTANTE: inviteId OU guest.id para a catraca
                     guestId: guest.id,                      // ID real do guest no banco
-                    personKey: `invite_${inviteId}`,        // Chave única para deduplica
                     name: guest.name,
                     email: guest.email,
                     document: guest.document,
@@ -178,11 +170,8 @@ class UserManager {
                     priority: 2
                 };
 
-                usersByPersonId.set(user.personKey, user);
+                users.push(user);
             }
-
-            // Converte Map para Array
-            const users = Array.from(usersByPersonId.values());
 
             console.log(`\n   📊 Resumo do Processamento:`);
             console.log(`   👥 ${participants.length} participants adicionados`);

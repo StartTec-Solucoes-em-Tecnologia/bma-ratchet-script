@@ -55,8 +55,8 @@ class IndividualFacialRegistration {
 
             console.log(`\n📥 Baixando ${users.length} imagens faciais...\n`);
 
-            // 1. Baixa todas as imagens (FORÇANDO DOWNLOAD)
-            const downloadResults = await this.imageCacheManager.downloadAllImages(users, true);
+            // 1. Baixa todas as imagens (usa cache se já existir)
+            const downloadResults = await this.imageCacheManager.downloadAllImages(users, false);
 
             if (downloadResults.users.length === 0) {
                 throw new Error('Nenhuma imagem foi baixada com sucesso');
