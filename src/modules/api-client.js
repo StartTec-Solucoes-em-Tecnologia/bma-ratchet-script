@@ -47,6 +47,43 @@ class ApiClient {
     }
 
     /**
+     * Busca faces existentes na leitora
+     */
+    async fetchExistingFaces(deviceIp) {
+        try {
+            const url = `http://${deviceIp}/cgi-bin/recordFinder.cgi?action=doSeekFind&name=AccessFace&count=4300`;
+            const axiosDigest = this.createDigestAuth();
+
+            const response = await axiosDigest.request({
+                method: 'GET',
+                url,
+                timeout: 30000,
+                headers: {
+                    'User-Agent': 'BMA-Facial-Registration/2.0.0'
+                }
+            });
+
+            const responseText = response.data;
+            const userIdsWithFace = new Set();
+
+            const lines = responseText.split('\n');
+            for (const line of lines) {
+                if (line.includes('records[') && line.includes('.UserID=')) {
+                    const match = line.match(/\.UserID=(.+)/);
+                    if (match && match[1]) {
+                        userIdsWithFace.add(match[1].trim());
+                    }
+                }
+            }
+
+            return userIdsWithFace;
+        } catch (error) {
+            console.error(`❌ Erro ao buscar faces existentes em ${deviceIp}:`, error.message);
+            return new Set();
+        }
+    }
+
+    /**
      * Deleta usuário da leitora
      */
     async deleteUser(deviceIp, recNo) {

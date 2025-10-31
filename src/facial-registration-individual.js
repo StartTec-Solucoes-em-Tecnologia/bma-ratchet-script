@@ -119,14 +119,27 @@ class IndividualFacialRegistration {
                 console.log(`\n🖥️  Dispositivo: ${deviceIp}`);
                 console.log('─'.repeat(60));
                 
+                // Busca faces já cadastradas
+                console.log(`   🔍 Verificando faces existentes...`);
+                const existingFaces = await this.apiClient.fetchExistingFaces(deviceIp);
+                console.log(`   📊 ${existingFaces.size} faces já cadastradas`);
+                
+                // Filtra apenas usuários que NÃO têm face
+                const usersToRegister = usersWithFormattedNames.filter(user => {
+                    return !existingFaces.has(String(user.userId));
+                });
+                
+                console.log(`   📝 ${usersToRegister.length} novos usuários para cadastrar`);
+                console.log(`   ⏭️  ${usersWithFormattedNames.length - usersToRegister.length} já têm face (pulando)\n`);
+                
                 const deviceRegisteredUsers = [];
 
-                for (let userIndex = 0; userIndex < usersWithFormattedNames.length; userIndex++) {
-                    const user = usersWithFormattedNames[userIndex];
-                    console.log(`   [${userIndex + 1}/${usersWithFormattedNames.length}] Cadastrando ${user.formattedName}...`);
+                for (let userIndex = 0; userIndex < usersToRegister.length; userIndex++) {
+                    const user = usersToRegister[userIndex];
+                    console.log(`   [${userIndex + 1}/${usersToRegister.length}] Cadastrando ${user.formattedName}...`);
                     
                     try {
-                        // Verificar se usuário já existe
+                        // Verificar se usuário já existe (mas não tem face)
                         const existingUsers = await this.apiClient.fetchExistingUsers(deviceIp);
                         const existingUser = existingUsers.find(u => u.userId === user.userId);
                         
