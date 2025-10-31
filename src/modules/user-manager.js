@@ -131,13 +131,18 @@ class UserManager {
 
             // 1. Processa TODOS os participants
             for (const participant of participants) {
-                const personId = `participant_${participant.id}`;
-                const inviteId = participant.invite[0]?.id || 'no-invite';
+                const inviteId = participant.invite[0]?.id;
+
+                if (!inviteId) {
+                    console.warn(`   ⚠️  Participant ${participant.name} sem invite, pulando...`);
+                    continue;
+                }
 
                 const user = {
-                    inviteId: inviteId,
-                    userId: participant.id,
-                    personKey: personId,  // Chave única para deduplica
+                    inviteId: inviteId,                     // ID do invite (usado na catraca como UserID)
+                    userId: inviteId,                       // IMPORTANTE: userId = inviteId para a catraca
+                    participantId: participant.id,          // ID real do participant no banco
+                    personKey: `invite_${inviteId}`,        // Chave única para deduplica
                     name: participant.name,
                     email: participant.email,
                     document: participant.document,
@@ -147,18 +152,23 @@ class UserManager {
                     priority: 1
                 };
 
-                usersByPersonId.set(personId, user);
+                usersByPersonId.set(user.personKey, user);
             }
 
             // 2. Processa TODOS os guests
             for (const guest of guests) {
-                const personId = `guest_${guest.id}`;
-                const inviteId = guest.invite[0]?.id || 'no-invite';
+                const inviteId = guest.invite[0]?.id;
+
+                if (!inviteId) {
+                    console.warn(`   ⚠️  Guest ${guest.name} sem invite, pulando...`);
+                    continue;
+                }
 
                 const user = {
-                    inviteId: inviteId,
-                    userId: guest.id,
-                    personKey: personId,  // Chave única para deduplica
+                    inviteId: inviteId,                     // ID do invite (usado na catraca como UserID)
+                    userId: inviteId,                       // IMPORTANTE: userId = inviteId para a catraca
+                    guestId: guest.id,                      // ID real do guest no banco
+                    personKey: `invite_${inviteId}`,        // Chave única para deduplica
                     name: guest.name,
                     email: guest.email,
                     document: guest.document,
@@ -168,7 +178,7 @@ class UserManager {
                     priority: 2
                 };
 
-                usersByPersonId.set(personId, user);
+                usersByPersonId.set(user.personKey, user);
             }
 
             // Converte Map para Array
